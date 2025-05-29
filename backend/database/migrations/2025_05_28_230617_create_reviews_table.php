@@ -13,6 +13,17 @@ return new class extends Migration
     {
         Schema::create('reviews', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('employee_id')->constrained()->onDelete('cascade');
+            $table->foreignId('review_template_id')->constrained()->onDelete('cascade');
+            $table->foreignId('reviewer_id')->constrained('users')->onDelete('cascade');
+            $table->string('title');
+            $table->text('description')->nullable();
+            $table->date('review_period_start');
+            $table->date('review_period_end');
+            $table->date('review_date');
+            $table->enum('status', ['draft', 'in_progress', 'completed', 'cancelled'])->default('draft');
+            $table->decimal('overall_score', 3, 2)->nullable(); // 0.00 to 10.00
+            $table->text('overall_comments')->nullable();
             $table->timestamps();
         });
     }

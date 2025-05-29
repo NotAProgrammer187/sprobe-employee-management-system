@@ -13,6 +13,11 @@ return new class extends Migration
     {
         Schema::create('review_templates', function (Blueprint $table) {
             $table->id();
+            $table->string('name');
+            $table->text('description')->nullable();
+            $table->enum('type', ['annual', 'quarterly', 'monthly', 'probation'])->default('annual');
+            $table->boolean('active')->default(true);
+            $table->json('criteria_structure')->nullable();
             $table->timestamps();
         });
     }
