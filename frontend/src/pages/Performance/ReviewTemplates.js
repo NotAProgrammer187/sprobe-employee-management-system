@@ -417,9 +417,6 @@ const ReviewTemplates = () => {
                   <Typography variant="body2" color="text.secondary">
                     <strong>Created:</strong> {formatDate(template.created_at)}
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    <strong>Criteria Count:</strong> {template.criteria_count || 0}
-                  </Typography>
                 </Box>
               </CardContent>
               

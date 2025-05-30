@@ -1,53 +1,39 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
+  Paper,
+  Typography,
   Grid,
   Card,
   CardContent,
-  Typography,
-  Button,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   Chip,
-  LinearProgress,
-  Alert,
-  CircularProgress,
+  Avatar,
   List,
   ListItem,
   ListItemText,
-  ListItemIcon,
-  Avatar,
+  ListItemAvatar,
+  CircularProgress,
+  Button,
+  Alert,
   Divider,
-  IconButton,
-  Tooltip
+  LinearProgress
 } from '@mui/material';
 import {
-  Assessment as AssessmentIcon,
   TrendingUp as TrendingUpIcon,
-  Schedule as ScheduleIcon,
-  CheckCircle as CheckCircleIcon,
-  Warning as WarningIcon,
-  Group as GroupIcon,
+  Assessment as AssessmentIcon,
+  People as PeopleIcon,
   Assignment as AssignmentIcon,
-  Star as StarIcon,
-  ArrowForward as ArrowForwardIcon,
-  Visibility as ViewIcon
+  Refresh as RefreshIcon,
+  Star as StarIcon
 } from '@mui/icons-material';
+import { reviewService, employeeService } from '../../services';
+import { calculateReviewScore, safeToNumber, formatDate, getScoreGrade, getEmployeeInitials } from '../../utils/performanceUtils';
 
-import { reviewService, employeeService, dashboardService } from '../../services';
-
-const PerformanceDashboard = () => {
-  const navigate = useNavigate();
-  
-  // State
+export const usePerformanceDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [employees, setEmployees] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
   const [dashboardData, setDashboardData] = useState({
     stats: {
       totalReviews: 0,
@@ -63,20 +49,68 @@ const PerformanceDashboard = () => {
     monthlyTrends: []
   });
 
-  // Load dashboard data
-  useEffect(() => {
-    loadDashboardData();
+  const calculateAverageScore = useCallback((reviews) => {
+    if (!reviews || reviews.length === 0) return 0;
+
+    const reviewsWithValidScores = reviews
+      .map(review => calculateReviewScore(review))
+      .filter(score => score > 0);
+    
+    if (reviewsWithValidScores.length === 0) return 0;
+    
+    const total = reviewsWithValidScores.reduce((sum, score) => sum + score, 0);
+    return Math.round((total / reviewsWithValidScores.length) * 10) / 10;
   }, []);
 
-  const loadDashboardData = async () => {
+  const calculateTopPerformers = useCallback((reviews, employeesData) => {
+    if (!reviews || !employeesData || reviews.length === 0 || employeesData.length === 0) {
+      return [];
+    }
+
+    const employeeScores = {};
+    
+    reviews.forEach(review => {
+      const reviewScore = calculateReviewScore(review);
+      if (reviewScore > 0) {
+        if (!employeeScores[review.employee_id]) {
+          employeeScores[review.employee_id] = {
+            scores: [],
+            count: 0
+          };
+        }
+        employeeScores[review.employee_id].scores.push(reviewScore);
+        employeeScores[review.employee_id].count++;
+      }
+    });
+
+    const performers = Object.entries(employeeScores)
+      .map(([employeeId, data]) => {
+        const employee = employeesData.find(emp => emp.id === parseInt(employeeId));
+        if (!employee) return null;
+        
+        const averageScore = data.scores.reduce((sum, score) => sum + score, 0) / data.scores.length;
+        
+        return {
+          employee,
+          averageScore: Math.round(averageScore * 10) / 10,
+          reviewCount: data.count
+        };
+      })
+      .filter(p => p !== null)
+      .sort((a, b) => b.averageScore - a.averageScore)
+      .slice(0, 5);
+
+    return performers;
+  }, []);
+
+  const loadDashboardData = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
       
-      // Load multiple data sources
       const [
         allReviews,
-        employees,
+        employeesData,
         upcomingReviews,
         completedReviews
       ] = await Promise.all([
@@ -86,31 +120,29 @@ const PerformanceDashboard = () => {
         reviewService.retrieveCompletedReviews()
       ]);
 
-      // Calculate statistics
+      setEmployees(employeesData || []);
+
       const stats = {
-        totalReviews: allReviews.length,
-        completedReviews: allReviews.filter(r => r.status === 'completed' || r.status === 'approved').length,
-        pendingReviews: allReviews.filter(r => r.status === 'pending').length,
-        averageScore: calculateAverageScore(completedReviews),
-        totalEmployees: employees.length
+        totalReviews: allReviews?.length || 0,
+        completedReviews: allReviews?.filter(r => r.status === 'completed' || r.status === 'approved').length || 0,
+        pendingReviews: allReviews?.filter(r => r.status === 'pending').length || 0,
+        averageScore: calculateAverageScore(completedReviews || []),
+        totalEmployees: employeesData?.length || 0
       };
 
-      // Get recent reviews (last 5 completed/approved)
       const recentReviews = allReviews
-        .filter(r => r.status === 'completed' || r.status === 'approved')
-        .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
-        .slice(0, 5);
+        ?.filter(r => r.status === 'completed' || r.status === 'approved')
+        ?.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
+        ?.slice(0, 5) || [];
 
-      // Calculate top performers (employees with highest average scores)
-      const topPerformers = calculateTopPerformers(completedReviews, employees);
+      const topPerformers = calculateTopPerformers(completedReviews || [], employeesData || []);
 
-      // Group reviews by status
       const reviewsByStatus = {
-        draft: allReviews.filter(r => r.status === 'draft').length,
-        pending: allReviews.filter(r => r.status === 'pending').length,
-        completed: allReviews.filter(r => r.status === 'completed').length,
-        approved: allReviews.filter(r => r.status === 'approved').length,
-        rejected: allReviews.filter(r => r.status === 'rejected').length
+        draft: allReviews?.filter(r => r.status === 'draft').length || 0,
+        pending: allReviews?.filter(r => r.status === 'pending').length || 0,
+        completed: allReviews?.filter(r => r.status === 'completed').length || 0,
+        approved: allReviews?.filter(r => r.status === 'approved').length || 0,
+        rejected: allReviews?.filter(r => r.status === 'rejected').length || 0
       };
 
       setDashboardData({
@@ -119,7 +151,7 @@ const PerformanceDashboard = () => {
         upcomingReviews: upcomingReviews || [],
         topPerformers,
         reviewsByStatus,
-        monthlyTrends: [] // Could be implemented with historical data
+        monthlyTrends: []
       });
 
     } catch (err) {
@@ -128,78 +160,53 @@ const PerformanceDashboard = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [calculateAverageScore, calculateTopPerformers]);
 
-  const calculateAverageScore = (reviews) => {
-    const reviewsWithScores = reviews.filter(r => r.overall_score > 0);
-    if (reviewsWithScores.length === 0) return 0;
-    
-    const total = reviewsWithScores.reduce((sum, r) => sum + r.overall_score, 0);
-    return Math.round((total / reviewsWithScores.length) * 10) / 10;
-  };
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadDashboardData();
+    setRefreshing(false);
+  }, [loadDashboardData]);
 
-  const calculateTopPerformers = (reviews, employees) => {
-    // Group reviews by employee and calculate average scores
-    const employeeScores = {};
-    
-    reviews.forEach(review => {
-      if (review.overall_score > 0) {
-        if (!employeeScores[review.employee_id]) {
-          employeeScores[review.employee_id] = {
-            scores: [],
-            count: 0
-          };
-        }
-        employeeScores[review.employee_id].scores.push(review.overall_score);
-        employeeScores[review.employee_id].count++;
-      }
-    });
-
-    // Calculate averages and create top performers list
-    const performers = Object.entries(employeeScores)
-      .map(([employeeId, data]) => {
-        const employee = employees.find(emp => emp.id === parseInt(employeeId));
-        const averageScore = data.scores.reduce((sum, score) => sum + score, 0) / data.scores.length;
-        
-        return {
-          employee,
-          averageScore: Math.round(averageScore * 10) / 10,
-          reviewCount: data.count
-        };
-      })
-      .filter(p => p.employee) // Only include valid employees
-      .sort((a, b) => b.averageScore - a.averageScore)
-      .slice(0, 5);
-
-    return performers;
-  };
-
-  const getEmployeeName = (employeeId, employees) => {
+  const getEmployeeName = useCallback((employeeId) => {
     const employee = employees.find(emp => emp.id === employeeId);
     return employee ? `${employee.first_name} ${employee.last_name}` : 'Unknown';
-  };
+  }, [employees]);
 
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString();
-  };
+  const getEmployee = useCallback((employeeId) => {
+    return employees.find(emp => emp.id === employeeId);
+  }, [employees]);
 
-  const getStatusColor = (status) => {
-    const colors = {
-      draft: 'default',
-      pending: 'warning',
-      completed: 'info',
-      approved: 'success',
-      rejected: 'error'
-    };
-    return colors[status] || 'default';
-  };
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
 
-  const getScoreColor = (score) => {
-    if (score >= 4.5) return 'success';
-    if (score >= 3.5) return 'info';
-    if (score >= 2.5) return 'warning';
-    return 'error';
+  return {
+    loading,
+    error,
+    setError,
+    employees,
+    refreshing,
+    dashboardData,
+    handleRefresh,
+    getEmployeeName,
+    getEmployee,
+    loadDashboardData
   };
+};
+
+// Dashboard Component
+const PerformanceDashboard = () => {
+  const {
+    loading,
+    error,
+    setError,
+    refreshing,
+    dashboardData,
+    handleRefresh,
+    getEmployeeName,
+    getEmployee
+  } = usePerformanceDashboard();
 
   if (loading) {
     return (
@@ -209,112 +216,161 @@ const PerformanceDashboard = () => {
     );
   }
 
+  if (error) {
+    return (
+      <Alert 
+        severity="error" 
+        action={
+          <Button color="inherit" size="small" onClick={() => {
+            setError('');
+            handleRefresh();
+          }}>
+            Retry
+          </Button>
+        }
+      >
+        {error}
+      </Alert>
+    );
+  }
+
+  const { stats, recentReviews, upcomingReviews, topPerformers, reviewsByStatus } = dashboardData;
+
   return (
     <Box>
-      {/* Error Alert */}
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>
-          {error}
-        </Alert>
-      )}
+      {/* Header with Refresh Button */}
+      <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={3}>
+        <Typography variant="h5" component="h2">
+          Performance Dashboard
+        </Typography>
+        <Button
+          variant="outlined"
+          startIcon={<RefreshIcon />}
+          onClick={handleRefresh}
+          disabled={refreshing}
+        >
+          {refreshing ? 'Refreshing...' : 'Refresh'}
+        </Button>
+      </Box>
 
-      {/* Key Statistics Cards */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={2.4}>
+      {/* Stats Cards */}
+      <Grid container spacing={3} mb={4}>
+        <Grid item xs={12} sm={6} md={3}>
           <Card>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <AssignmentIcon sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
-              <Typography variant="h4" color="primary">
-                {dashboardData.stats.totalReviews}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Total Reviews
+            <CardContent>
+              <Box display="flex" alignItems="center" mb={1}>
+                <AssignmentIcon color="primary" sx={{ mr: 1 }} />
+                <Typography variant="h6" component="div">
+                  Total Reviews
+                </Typography>
+              </Box>
+              <Typography variant="h4" component="div" color="primary">
+                {stats.totalReviews}
               </Typography>
             </CardContent>
           </Card>
         </Grid>
-        
-        <Grid item xs={12} sm={6} md={2.4}>
+
+        <Grid item xs={12} sm={6} md={3}>
           <Card>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <CheckCircleIcon sx={{ fontSize: 40, color: 'success.main', mb: 1 }} />
-              <Typography variant="h4" color="success.main">
-                {dashboardData.stats.completedReviews}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Completed
+            <CardContent>
+              <Box display="flex" alignItems="center" mb={1}>
+                <TrendingUpIcon color="success" sx={{ mr: 1 }} />
+                <Typography variant="h6" component="div">
+                  Completed
+                </Typography>
+              </Box>
+              <Typography variant="h4" component="div" color="success.main">
+                {stats.completedReviews}
               </Typography>
             </CardContent>
           </Card>
         </Grid>
-        
-        <Grid item xs={12} sm={6} md={2.4}>
+
+        <Grid item xs={12} sm={6} md={3}>
           <Card>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <ScheduleIcon sx={{ fontSize: 40, color: 'warning.main', mb: 1 }} />
-              <Typography variant="h4" color="warning.main">
-                {dashboardData.stats.pendingReviews}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Pending
+            <CardContent>
+              <Box display="flex" alignItems="center" mb={1}>
+                <AssessmentIcon color="warning" sx={{ mr: 1 }} />
+                <Typography variant="h6" component="div">
+                  Pending
+                </Typography>
+              </Box>
+              <Typography variant="h4" component="div" color="warning.main">
+                {stats.pendingReviews}
               </Typography>
             </CardContent>
           </Card>
         </Grid>
-        
-        <Grid item xs={12} sm={6} md={2.4}>
+
+        <Grid item xs={12} sm={6} md={3}>
           <Card>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <StarIcon sx={{ fontSize: 40, color: 'info.main', mb: 1 }} />
-              <Typography variant="h4" color="info.main">
-                {dashboardData.stats.averageScore}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Avg Score
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        
-        <Grid item xs={12} sm={6} md={2.4}>
-          <Card>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <GroupIcon sx={{ fontSize: 40, color: 'secondary.main', mb: 1 }} />
-              <Typography variant="h4" color="secondary.main">
-                {dashboardData.stats.totalEmployees}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Employees
+            <CardContent>
+              <Box display="flex" alignItems="center" mb={1}>
+                <PeopleIcon color="info" sx={{ mr: 1 }} />
+                <Typography variant="h6" component="div">
+                  Employees
+                </Typography>
+              </Box>
+              <Typography variant="h4" component="div" color="info.main">
+                {stats.totalEmployees}
               </Typography>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
 
-      {/* Review Status Overview */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} md={8}>
+      {/* Average Score Card */}
+      <Grid container spacing={3} mb={4}>
+        <Grid item xs={12} md={6}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Review Status Distribution
+                Average Performance Score
+              </Typography>
+              <Box display="flex" alignItems="center" mb={2}>
+                <Typography variant="h3" component="div" color="primary" sx={{ mr: 2 }}>
+                  {stats.averageScore.toFixed(1)}
+                </Typography>
+                <Box>
+                  {stats.averageScore > 0 && (
+                    <Chip 
+                      label={getScoreGrade(stats.averageScore)?.grade || 'N/A'}
+                      color={stats.averageScore >= 4 ? 'success' : stats.averageScore >= 3 ? 'primary' : 'warning'}
+                      size="small"
+                    />
+                  )}
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                    {getScoreGrade(stats.averageScore)?.level || 'No data'}
+                  </Typography>
+                </Box>
+              </Box>
+              <LinearProgress 
+                variant="determinate" 
+                value={(stats.averageScore / 5) * 100} 
+                sx={{ height: 8, borderRadius: 4 }}
+              />
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Reviews by Status */}
+        <Grid item xs={12} md={6}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Reviews by Status
               </Typography>
               <Grid container spacing={2}>
-                {Object.entries(dashboardData.reviewsByStatus).map(([status, count]) => (
-                  <Grid item xs={6} sm={4} md={2.4} key={status}>
-                    <Box sx={{ textAlign: 'center', p: 1 }}>
-                      <Typography variant="h5" color={`${getStatusColor(status)}.main`}>
+                {Object.entries(reviewsByStatus).map(([status, count]) => (
+                  <Grid item xs={6} key={status}>
+                    <Box textAlign="center">
+                      <Typography variant="h4" component="div">
                         {count}
                       </Typography>
-                      <Typography variant="caption" sx={{ textTransform: 'capitalize' }}>
+                      <Typography variant="body2" color="text.secondary" sx={{ textTransform: 'capitalize' }}>
                         {status}
                       </Typography>
-                      <LinearProgress
-                        variant="determinate"
-                        value={(count / dashboardData.stats.totalReviews) * 100}
-                        color={getStatusColor(status)}
-                        sx={{ mt: 1, height: 4 }}
-                      />
                     </Box>
                   </Grid>
                 ))}
@@ -322,284 +378,144 @@ const PerformanceDashboard = () => {
             </CardContent>
           </Card>
         </Grid>
-        
-        <Grid item xs={12} md={4}>
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <Typography variant="h6">
-                  Quick Actions
-                </Typography>
-              </Box>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                <Button
-                  variant="contained"
-                  startIcon={<AssignmentIcon />}
-                  onClick={() => navigate('/performance/reviews/new')}
-                  fullWidth
-                >
-                  Create New Review
-                </Button>
-                <Button
-                  variant="outlined"
-                  startIcon={<AssessmentIcon />}
-                  onClick={() => navigate('/performance/reviews')}
-                  fullWidth
-                >
-                  View All Reviews
-                </Button>
-                <Button
-                  variant="outlined"
-                  startIcon={<TrendingUpIcon />}
-                  onClick={() => navigate('/performance/templates')}
-                  fullWidth
-                >
-                  Manage Templates
-                </Button>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
       </Grid>
 
       {/* Recent Reviews and Top Performers */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        {/* Recent Reviews */}
+      <Grid container spacing={3}>
         <Grid item xs={12} md={6}>
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <Typography variant="h6">
-                  Recent Reviews
-                </Typography>
-                <Button
-                  size="small"
-                  endIcon={<ArrowForwardIcon />}
-                  onClick={() => navigate('/performance/reviews')}
-                >
-                  View All
-                </Button>
-              </Box>
-              
-              {dashboardData.recentReviews.length > 0 ? (
-                <List>
-                  {dashboardData.recentReviews.map((review, index) => (
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Recent Reviews
+            </Typography>
+            {recentReviews.length > 0 ? (
+              <List>
+                {recentReviews.map((review, index) => {
+                  const employee = getEmployee(review.employee_id);
+                  const score = calculateReviewScore(review);
+                  const grade = getScoreGrade(score);
+                  
+                  return (
                     <React.Fragment key={review.id}>
-                      <ListItem sx={{ px: 0 }}>
-                        <ListItemIcon>
-                          <Avatar sx={{ bgcolor: getScoreColor(review.overall_score) + '.main' }}>
-                            {review.overall_score || '?'}
+                      <ListItem>
+                        <ListItemAvatar>
+                          <Avatar sx={{ bgcolor: grade.color }}>
+                            {employee ? getEmployeeInitials(employee.first_name, employee.last_name) : '??'}
                           </Avatar>
-                        </ListItemIcon>
+                        </ListItemAvatar>
                         <ListItemText
-                          primary={review.title}
-                          secondary={`${getEmployeeName(review.employee_id, [])} • ${formatDate(review.updated_at)}`}
+                          primary={getEmployeeName(review.employee_id)}
+                          secondary={
+                            <Box>
+                              <Typography variant="body2" color="text.secondary">
+                                Score: {score.toFixed(1)} • {formatDate(review.updated_at)}
+                              </Typography>
+                              <Chip 
+                                label={review.status.toUpperCase()} 
+                                size="small" 
+                                color={review.status === 'completed' ? 'success' : 'default'}
+                                sx={{ mt: 0.5 }}
+                              />
+                            </Box>
+                          }
                         />
-                        <Chip
-                          label={review.status}
-                          color={getStatusColor(review.status)}
-                          size="small"
-                        />
-                        <Tooltip title="View Review">
-                          <IconButton
-                            size="small"
-                            onClick={() => navigate(`/performance/reviews/${review.id}`)}
-                            sx={{ ml: 1 }}
-                          >
-                            <ViewIcon />
-                          </IconButton>
-                        </Tooltip>
                       </ListItem>
-                      {index < dashboardData.recentReviews.length - 1 && <Divider />}
+                      {index < recentReviews.length - 1 && <Divider variant="inset" component="li" />}
                     </React.Fragment>
-                  ))}
-                </List>
-              ) : (
-                <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 3 }}>
-                  No recent reviews found
-                </Typography>
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Top Performers */}
-        <Grid item xs={12} md={6}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Top Performers
+                  );
+                })}
+              </List>
+            ) : (
+              <Typography color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
+                No recent reviews found
               </Typography>
-              
-              {dashboardData.topPerformers.length > 0 ? (
-                <List>
-                  {dashboardData.topPerformers.map((performer, index) => (
-                    <React.Fragment key={performer.employee?.id || index}>
-                      <ListItem sx={{ px: 0 }}>
-                        <ListItemIcon>
-                          <Avatar sx={{ bgcolor: 'primary.main' }}>
-                            #{index + 1}
+            )}
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12} md={6}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Top Performers
+            </Typography>
+            {topPerformers.length > 0 ? (
+              <List>
+                {topPerformers.map((performer, index) => {
+                  const { employee, averageScore, reviewCount } = performer;
+                  const grade = getScoreGrade(averageScore);
+                  
+                  return (
+                    <React.Fragment key={employee.id}>
+                      <ListItem>
+                        <ListItemAvatar>
+                          <Avatar sx={{ bgcolor: grade.color }}>
+                            {index === 0 && <StarIcon />}
+                            {index !== 0 && getEmployeeInitials(employee.first_name, employee.last_name)}
                           </Avatar>
-                        </ListItemIcon>
+                        </ListItemAvatar>
                         <ListItemText
-                          primary={`${performer.employee?.first_name} ${performer.employee?.last_name}`}
-                          secondary={`${performer.reviewCount} review${performer.reviewCount !== 1 ? 's' : ''}`}
+                          primary={`${employee.first_name} ${employee.last_name}`}
+                          secondary={
+                            <Box>
+                              <Typography variant="body2" color="text.secondary">
+                                Average Score: {averageScore.toFixed(1)} • {reviewCount} review{reviewCount !== 1 ? 's' : ''}
+                              </Typography>
+                              <Chip 
+                                label={grade.grade}
+                                size="small"
+                                sx={{ 
+                                  mt: 0.5,
+                                  backgroundColor: grade.color + '20',
+                                  color: grade.color 
+                                }}
+                              />
+                            </Box>
+                          }
                         />
-                        <Box sx={{ textAlign: 'right' }}>
-                          <Typography variant="h6" color={getScoreColor(performer.averageScore) + '.main'}>
-                            {performer.averageScore}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            avg score
-                          </Typography>
-                        </Box>
                       </ListItem>
-                      {index < dashboardData.topPerformers.length - 1 && <Divider />}
+                      {index < topPerformers.length - 1 && <Divider variant="inset" component="li" />}
                     </React.Fragment>
-                  ))}
-                </List>
-              ) : (
-                <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 3 }}>
-                  No performance data available yet
-                </Typography>
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-
-      {/* Upcoming Reviews */}
-      {dashboardData.upcomingReviews.length > 0 && (
-        <Grid container spacing={3}>
-          <Grid item xs={12}>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  <Typography variant="h6">
-                    Upcoming Reviews
-                  </Typography>
-                  <Chip
-                    icon={<ScheduleIcon />}
-                    label={`${dashboardData.upcomingReviews.length} pending`}
-                    color="warning"
-                    variant="outlined"
-                  />
-                </Box>
-                
-                <TableContainer>
-                  <Table>
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Review Title</TableCell>
-                        <TableCell>Employee</TableCell>
-                        <TableCell>Due Date</TableCell>
-                        <TableCell>Status</TableCell>
-                        <TableCell align="center">Action</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {dashboardData.upcomingReviews.map((review) => (
-                        <TableRow key={review.id} hover>
-                          <TableCell>
-                            <Typography variant="subtitle2">
-                              {review.title}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            {getEmployeeName(review.employee_id, [])}
-                          </TableCell>
-                          <TableCell>
-                            {review.review_period_end ? formatDate(review.review_period_end) : 'Not set'}
-                          </TableCell>
-                          <TableCell>
-                            <Chip
-                              label={review.status}
-                              color={getStatusColor(review.status)}
-                              size="small"
-                            />
-                          </TableCell>
-                          <TableCell align="center">
-                            <Button
-                              size="small"
-                              variant="outlined"
-                              onClick={() => navigate(`/performance/reviews/${review.id}/edit`)}
-                            >
-                              Continue
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              </CardContent>
-            </Card>
-          </Grid>
-        </Grid>
-      )}
-
-      {/* Performance Insights */}
-      <Grid container spacing={3} sx={{ mt: 2 }}>
-        <Grid item xs={12}>
-          <Paper sx={{ p: 3, bgcolor: 'primary.50' }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <TrendingUpIcon sx={{ fontSize: 40, color: 'primary.main', mr: 2 }} />
-              <Box>
-                <Typography variant="h6" color="primary.main">
-                  Performance Insights
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Key metrics and recommendations
-                </Typography>
-              </Box>
-            </Box>
-            
-            <Grid container spacing={2}>
-              <Grid item xs={12} md={4}>
-                <Box sx={{ textAlign: 'center', p: 2 }}>
-                  <Typography variant="h4" color="success.main">
-                    {dashboardData.stats.completedReviews > 0 ? 
-                      Math.round((dashboardData.stats.completedReviews / dashboardData.stats.totalReviews) * 100) : 0}%
-                  </Typography>
-                  <Typography variant="body2">
-                    Completion Rate
-                  </Typography>
-                </Box>
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <Box sx={{ textAlign: 'center', p: 2 }}>
-                  <Typography variant="h4" color="info.main">
-                    {dashboardData.stats.averageScore > 0 ? 
-                      Math.round((dashboardData.stats.averageScore / 5) * 100) : 0}%
-                  </Typography>
-                  <Typography variant="body2">
-                    Average Performance
-                  </Typography>
-                </Box>
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <Box sx={{ textAlign: 'center', p: 2 }}>
-                  <Typography variant="h4" color="warning.main">
-                    {dashboardData.topPerformers.length}
-                  </Typography>
-                  <Typography variant="body2">
-                    Top Performers
-                  </Typography>
-                </Box>
-              </Grid>
-            </Grid>
-            
-            {dashboardData.stats.pendingReviews > 0 && (
-              <Alert severity="info" sx={{ mt: 2 }}>
-                <Typography variant="body2">
-                  You have {dashboardData.stats.pendingReviews} pending review{dashboardData.stats.pendingReviews !== 1 ? 's' : ''} 
-                  that need attention. Consider reviewing them to maintain performance evaluation schedules.
-                </Typography>
-              </Alert>
+                  );
+                })}
+              </List>
+            ) : (
+              <Typography color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
+                No performance data available
+              </Typography>
             )}
           </Paper>
         </Grid>
       </Grid>
+
+      {/* Upcoming Reviews */}
+      {upcomingReviews.length > 0 && (
+        <Paper sx={{ mt: 3, p: 2 }}>
+          <Typography variant="h6" gutterBottom>
+            Upcoming Reviews
+          </Typography>
+          <List>
+            {upcomingReviews.map((review, index) => (
+              <React.Fragment key={review.id}>
+                <ListItem>
+                  <ListItemAvatar>
+                    <Avatar>
+                      <AssignmentIcon />
+                    </Avatar>
+                  </ListItemAvatar>
+                  <ListItemText
+                    primary={getEmployeeName(review.employee_id)}
+                    secondary={
+                      <Typography variant="body2" color="text.secondary">
+                        Due: {formatDate(review.due_date)} • Period: {review.review_period || 'Not specified'}
+                      </Typography>
+                    }
+                  />
+                </ListItem>
+                {index < upcomingReviews.length - 1 && <Divider variant="inset" component="li" />}
+              </React.Fragment>
+            ))}
+          </List>
+        </Paper>
+      )}
     </Box>
   );
 };
