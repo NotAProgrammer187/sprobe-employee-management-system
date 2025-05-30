@@ -1,49 +1,49 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
-  Paper,
-  Typography,
-  TextField,
-  Button,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Rating,
+  Container,
   Alert,
   CircularProgress,
-  Grid,
-  Card,
-  CardContent,
-  Divider
+  Backdrop
 } from '@mui/material';
-import { Star as StarIcon } from '@mui/icons-material';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { reviewService, employeeService, reviewTemplateService } from '../../services';
+
+// Import our new modular components
+import ReviewFormHeader from '../../components/Reviews/ReviewFormHeader';
+import ReviewBasicInfo from '../../components/Reviews/ReviewBasicInfo';
+import PerformanceCriteriaSection from '../../components/Reviews/PerformanceCriteriaSection';
+import OverallCommentsSection from '../../components/Reviews/OverallCommentsSection';
+import ReviewFormActions from '../../components/Reviews/ReviewFormActions';
 
 const SimpleReviewForm = () => {
   const { id: reviewId } = useParams();
-  const navigate = useNavigate();
   const isEditing = reviewId && reviewId !== 'new';
 
   // Basic state
   const [loading, setLoading] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [lastSaved, setLastSaved] = useState(null);
 
-  // Form data - FIXED: Added missing fields and default reviewer_id
+  // Form data with all required fields
   const [formData, setFormData] = useState({
     title: '',
     employee_id: '',
     review_template_id: '',
-    reviewer_id: 1, // FIXED: Default to employee ID 1 (change to a valid employee ID)
+    reviewer_id: 1,
     review_date: new Date().toISOString().split('T')[0],
-    review_period_start: '', // FIXED: Added missing field
-    review_period_end: '',   // FIXED: Added missing field
-    description: '',         // FIXED: Added missing field
+    review_period_start: '',
+    review_period_end: '',
+    description: '',
     status: 'draft',
     overall_comments: ''
   });
+
+  // Validation errors
+  const [errors, setErrors] = useState({});
 
   // Dropdown data
   const [employees, setEmployees] = useState([]);
@@ -55,14 +55,19 @@ const SimpleReviewForm = () => {
   // Load initial data
   useEffect(() => {
     loadInitialData();
+  }, []);
+
+  // Load review if editing
+  useEffect(() => {
     if (isEditing) {
       loadReview();
+    } else {
+      setPageLoading(false);
     }
-  }, [reviewId]);
+  }, [reviewId, isEditing]);
 
   const loadInitialData = async () => {
     try {
-      setLoading(true);
       const [employeesData, templatesData] = await Promise.all([
         employeeService.retrieveActiveEmployees(),
         reviewTemplateService.retrieveReviewTemplates()
@@ -71,7 +76,7 @@ const SimpleReviewForm = () => {
       setEmployees(employeesData || []);
       setTemplates(templatesData || []);
       
-      // FIXED: Auto-set reviewer_id to first available employee if none set
+      // Auto-set reviewer_id to first available employee if none set
       if (employeesData && employeesData.length > 0 && !formData.reviewer_id) {
         setFormData(prev => ({
           ...prev,
@@ -81,25 +86,23 @@ const SimpleReviewForm = () => {
     } catch (err) {
       setError('Failed to load initial data');
       console.error('Error loading data:', err);
-    } finally {
-      setLoading(false);
     }
   };
 
   const loadReview = async () => {
     try {
-      setLoading(true);
+      setPageLoading(true);
       const reviewData = await reviewService.retrieveReview(reviewId);
       
       setFormData({
         title: reviewData.title || '',
         employee_id: reviewData.employee_id || '',
         review_template_id: reviewData.review_template_id || '',
-        reviewer_id: reviewData.reviewer_id || 1, // FIXED: Default to 1 if null
+        reviewer_id: reviewData.reviewer_id || 1,
         review_date: reviewData.review_date ? reviewData.review_date.split('T')[0] : new Date().toISOString().split('T')[0],
-        review_period_start: reviewData.review_period_start ? reviewData.review_period_start.split('T')[0] : '', // FIXED
-        review_period_end: reviewData.review_period_end ? reviewData.review_period_end.split('T')[0] : '',     // FIXED
-        description: reviewData.description || '',    // FIXED
+        review_period_start: reviewData.review_period_start ? reviewData.review_period_start.split('T')[0] : '',
+        review_period_end: reviewData.review_period_end ? reviewData.review_period_end.split('T')[0] : '',
+        description: reviewData.description || '',
         status: reviewData.status || 'draft',
         overall_comments: reviewData.overall_comments || ''
       });
@@ -112,13 +115,19 @@ const SimpleReviewForm = () => {
       setError('Failed to load review');
       console.error('Error loading review:', err);
     } finally {
-      setLoading(false);
+      setPageLoading(false);
     }
   };
 
   // Handle form field changes
-  const handleInputChange = (field, value) => {
+  const handleInputChange = useCallback((field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+    setHasUnsavedChanges(true);
+    
+    // Clear related errors
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: null }));
+    }
     
     // Auto-generate title when employee changes
     if (field === 'employee_id' && value) {
@@ -136,7 +145,7 @@ const SimpleReviewForm = () => {
     if (field === 'review_template_id' && value) {
       loadTemplateCriteria(value);
     }
-  };
+  }, [employees, errors]);
 
   // Load criteria from selected template
   const loadTemplateCriteria = async (templateId) => {
@@ -149,7 +158,7 @@ const SimpleReviewForm = () => {
           criteria_name: criterion.criteria_name || criterion.name,
           criteria_description: criterion.criteria_description || criterion.description || '',
           weight: criterion.weight || 20,
-          score: 0, // Start with 0 score
+          score: 0,
           comments: '',
           sort_order: index
         }));
@@ -161,12 +170,13 @@ const SimpleReviewForm = () => {
     }
   };
 
-  // Handle criteria score changes
-  const handleCriteriaChange = (index, field, value) => {
+  // Handle criteria changes
+  const handleCriteriaChange = useCallback((index, field, value) => {
     setCriteria(prev => prev.map((criterion, i) => 
       i === index ? { ...criterion, [field]: value } : criterion
     ));
-  };
+    setHasUnsavedChanges(true);
+  }, []);
 
   // Calculate overall score
   const calculateOverallScore = () => {
@@ -179,38 +189,46 @@ const SimpleReviewForm = () => {
       sum + ((c.score || 0) * (c.weight || 0) / 100), 0
     );
     
-    return Math.round(weightedScore * 10) / 10; // Round to 1 decimal place
+    return Math.round(weightedScore * 10) / 10;
   };
 
-  // Save review - FIXED: Send all required fields
+  // Validation
+  const validateForm = () => {
+    const newErrors = {};
+
+    if (!formData.title.trim()) {
+      newErrors.title = 'Title is required';
+    }
+    if (!formData.employee_id) {
+      newErrors.employee_id = 'Employee must be selected';
+    }
+    if (!formData.review_template_id) {
+      newErrors.review_template_id = 'Review template must be selected';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  // Save review
   const handleSave = async () => {
     try {
+      if (!validateForm()) {
+        setError('Please fix the validation errors before saving');
+        return;
+      }
+
       setLoading(true);
       setError('');
 
-      // Basic validation
-      if (!formData.title.trim()) {
-        setError('Title is required');
-        return;
-      }
-      if (!formData.employee_id) {
-        setError('Employee must be selected');
-        return;
-      }
-      if (!formData.review_template_id) {
-        setError('Review template must be selected');
-        return;
-      }
-
-      // FIXED: Send all required fields to match backend expectations
       const reviewData = {
         employee_id: parseInt(formData.employee_id),
         review_template_id: parseInt(formData.review_template_id),
-        reviewer_id: parseInt(formData.reviewer_id) || 1, // FIXED: Ensure not null
+        reviewer_id: parseInt(formData.reviewer_id) || 1,
         title: formData.title,
-        description: formData.description || '',  // FIXED: Include description
-        review_period_start: formData.review_period_start || null,  // FIXED: Include period start
-        review_period_end: formData.review_period_end || null,      // FIXED: Include period end
+        description: formData.description || '',
+        review_period_start: formData.review_period_start || null,
+        review_period_end: formData.review_period_end || null,
         review_date: formData.review_date,
         status: formData.status,
         overall_comments: formData.overall_comments || '',
@@ -224,8 +242,6 @@ const SimpleReviewForm = () => {
         }))
       };
 
-      console.log('Sending review data:', reviewData); // Debug log
-
       let result;
       if (isEditing) {
         result = await reviewService.updateReview(reviewId, reviewData);
@@ -235,9 +251,12 @@ const SimpleReviewForm = () => {
         setSuccess('Review created successfully');
         // Navigate to edit mode with the new ID
         if (result && result.id) {
-          navigate(`/performance/reviews/${result.id}/edit`);
+          window.history.replaceState(null, '', `/performance/reviews/${result.id}/edit`);
         }
       }
+      
+      setHasUnsavedChanges(false);
+      setLastSaved(new Date().toISOString());
     } catch (err) {
       console.error('Error saving review:', err);
       setError(err.response?.data?.message || err.message || 'Failed to save review');
@@ -264,6 +283,7 @@ const SimpleReviewForm = () => {
       
       // Refresh the review data
       await loadReview();
+      setHasUnsavedChanges(false);
     } catch (err) {
       setError(err.message || 'Failed to submit review');
       console.error('Error submitting review:', err);
@@ -272,272 +292,107 @@ const SimpleReviewForm = () => {
     }
   };
 
+  // Derived values
   const overallScore = calculateOverallScore();
   const completedCriteria = criteria.filter(c => c.score > 0).length;
-  const canSubmit = criteria.length > 0 && completedCriteria === criteria.length && formData.status === 'draft';
+  const selectedEmployee = employees.find(emp => emp.id === parseInt(formData.employee_id));
+  const employeeName = selectedEmployee ? `${selectedEmployee.first_name} ${selectedEmployee.last_name}` : '';
+
+  // Loading state
+  if (pageLoading) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="50vh">
+        <CircularProgress size={60} />
+      </Box>
+    );
+  }
 
   return (
-    <Box sx={{ maxWidth: 1000, mx: 'auto', p: 3 }}>
-      <Typography variant="h4" gutterBottom>
-        {isEditing ? 'Edit Review' : 'Create New Review'}
-      </Typography>
+    <>
+      {/* Loading Backdrop */}
+      <Backdrop 
+        sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1 }}
+        open={loading}
+      >
+        <CircularProgress color="inherit" />
+      </Backdrop>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>
-          {error}
-        </Alert>
-      )}
-
-      {success && (
-        <Alert severity="success" sx={{ mb: 3 }} onClose={() => setSuccess('')}>
-          {success}
-        </Alert>
-      )}
-
-      {/* Basic Information */}
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Typography variant="h6" gutterBottom>
-          Review Information
-        </Typography>
-        
-        <Grid container spacing={3}>
-          <Grid item xs={12} md={6}>
-            <FormControl fullWidth margin="normal">
-              <InputLabel>Employee</InputLabel>
-              <Select
-                value={formData.employee_id}
-                label="Employee"
-                onChange={(e) => handleInputChange('employee_id', e.target.value)}
-                disabled={loading}
-              >
-                {employees.map((employee) => (
-                  <MenuItem key={employee.id} value={employee.id}>
-                    {employee.first_name} {employee.last_name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Grid>
-
-          <Grid item xs={12} md={6}>
-            <FormControl fullWidth margin="normal">
-              <InputLabel>Review Template</InputLabel>
-              <Select
-                value={formData.review_template_id}
-                label="Review Template"
-                onChange={(e) => handleInputChange('review_template_id', e.target.value)}
-                disabled={loading}
-              >
-                {templates.map((template) => (
-                  <MenuItem key={template.id} value={template.id}>
-                    {template.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Grid>
-
-          <Grid item xs={12} md={6}>
-            <FormControl fullWidth margin="normal">
-              <InputLabel>Reviewer</InputLabel>
-              <Select
-                value={formData.reviewer_id}
-                label="Reviewer"
-                onChange={(e) => handleInputChange('reviewer_id', e.target.value)}
-                disabled={loading}
-              >
-                {employees.map((employee) => (
-                  <MenuItem key={employee.id} value={employee.id}>
-                    {employee.first_name} {employee.last_name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Grid>
-
-          <Grid item xs={12} md={6}>
-            <TextField
-              fullWidth
-              type="date"
-              label="Review Date"
-              value={formData.review_date}
-              onChange={(e) => handleInputChange('review_date', e.target.value)}
-              margin="normal"
-              InputLabelProps={{ shrink: true }}
-              disabled={loading}
-            />
-          </Grid>
-
-          <Grid item xs={12}>
-            <TextField
-              fullWidth
-              label="Review Title"
-              value={formData.title}
-              onChange={(e) => handleInputChange('title', e.target.value)}
-              margin="normal"
-              disabled={loading}
-            />
-          </Grid>
-
-          <Grid item xs={12} md={6}>
-            <TextField
-              fullWidth
-              type="date"
-              label="Review Period Start"
-              value={formData.review_period_start}
-              onChange={(e) => handleInputChange('review_period_start', e.target.value)}
-              margin="normal"
-              InputLabelProps={{ shrink: true }}
-              disabled={loading}
-            />
-          </Grid>
-
-          <Grid item xs={12} md={6}>
-            <TextField
-              fullWidth
-              type="date"
-              label="Review Period End"
-              value={formData.review_period_end}
-              onChange={(e) => handleInputChange('review_period_end', e.target.value)}
-              margin="normal"
-              InputLabelProps={{ shrink: true }}
-              disabled={loading}
-            />
-          </Grid>
-        </Grid>
-      </Paper>
-
-      {/* Overall Score Display */}
-      {criteria.length > 0 && (
-        <Paper sx={{ p: 3, mb: 3, bgcolor: 'primary.main', color: 'white' }}>
-          <Typography variant="h6" gutterBottom>
-            Overall Score: {overallScore.toFixed(1)} / 5.0
-          </Typography>
-          <Typography variant="body2">
-            Progress: {completedCriteria} of {criteria.length} criteria completed 
-            ({Math.round((completedCriteria / criteria.length) * 100)}%)
-          </Typography>
-        </Paper>
-      )}
-
-      {/* Criteria Section */}
-      {criteria.length > 0 && (
-        <Paper sx={{ p: 3, mb: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            Performance Criteria
-          </Typography>
-          
-          {criteria.map((criterion, index) => (
-            <Card key={criterion.id || index} sx={{ mb: 2 }}>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  {criterion.criteria_name}
-                  <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 2 }}>
-                    (Weight: {criterion.weight}%)
-                  </Typography>
-                </Typography>
-
-                {criterion.criteria_description && (
-                  <Typography variant="body2" color="text.secondary" paragraph>
-                    {criterion.criteria_description}
-                  </Typography>
-                )}
-
-                <Grid container spacing={3} alignItems="center">
-                  <Grid item xs={12} md={4}>
-                    <Typography component="legend" gutterBottom>
-                      Rating (Required)
-                    </Typography>
-                    <Rating
-                      value={criterion.score}
-                      onChange={(event, newValue) => handleCriteriaChange(index, 'score', newValue || 0)}
-                      max={5}
-                      size="large"
-                      icon={<StarIcon fontSize="inherit" />}
-                      emptyIcon={<StarIcon fontSize="inherit" />}
-                      disabled={loading || formData.status !== 'draft'}
-                    />
-                    <Typography variant="body2" color="text.secondary">
-                      Current: {criterion.score}/5
-                    </Typography>
-                  </Grid>
-
-                  <Grid item xs={12} md={8}>
-                    <TextField
-                      fullWidth
-                      multiline
-                      rows={3}
-                      label="Comments"
-                      value={criterion.comments}
-                      onChange={(e) => handleCriteriaChange(index, 'comments', e.target.value)}
-                      placeholder="Provide specific feedback and examples..."
-                      disabled={loading || formData.status !== 'draft'}
-                    />
-                  </Grid>
-                </Grid>
-              </CardContent>
-            </Card>
-          ))}
-        </Paper>
-      )}
-
-      {/* Overall Comments */}
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Typography variant="h6" gutterBottom>
-          Overall Comments
-        </Typography>
-        <TextField
-          fullWidth
-          multiline
-          rows={4}
-          label="Overall Review Comments"
-          value={formData.overall_comments}
-          onChange={(e) => handleInputChange('overall_comments', e.target.value)}
-          placeholder="Provide overall feedback, summary, and recommendations..."
-          disabled={loading || formData.status !== 'draft'}
+      <Container maxWidth="lg" sx={{ py: 4, pb: 10 }}>
+        {/* Header */}
+        <ReviewFormHeader
+          isEditing={isEditing}
+          reviewStatus={formData.status}
+          employeeName={employeeName}
+          overallScore={overallScore}
+          completedCriteria={completedCriteria}
+          totalCriteria={criteria.length}
         />
-      </Paper>
 
-      {/* Action Buttons */}
-      <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
-        <Button
-          variant="outlined"
-          onClick={() => navigate('/performance/reviews')}
-          disabled={loading}
-        >
-          Cancel
-        </Button>
-
-        <Button
-          variant="contained"
-          onClick={handleSave}
-          disabled={loading}
-          startIcon={loading ? <CircularProgress size={20} /> : null}
-        >
-          Save Review
-        </Button>
-
-        {isEditing && formData.status === 'draft' && (
-          <Button
-            variant="contained"
-            color="success"
-            onClick={handleSubmit}
-            disabled={loading || !canSubmit}
-            startIcon={loading ? <CircularProgress size={20} /> : null}
+        {/* Error/Success Messages */}
+        {error && (
+          <Alert 
+            severity="error" 
+            sx={{ mb: 3, borderRadius: '8px' }} 
+            onClose={() => setError('')}
           >
-            Submit for Approval
-          </Button>
+            {error}
+          </Alert>
         )}
-      </Box>
 
-      {/* Helpful Info */}
-      {criteria.length > 0 && completedCriteria < criteria.length && (
-        <Alert severity="info" sx={{ mt: 3 }}>
-          Please rate all {criteria.length} criteria before submitting the review. 
-          {criteria.length - completedCriteria} criteria still need ratings.
-        </Alert>
-      )}
-    </Box>
+        {success && (
+          <Alert 
+            severity="success" 
+            sx={{ mb: 3, borderRadius: '8px' }} 
+            onClose={() => setSuccess('')}
+          >
+            {success}
+          </Alert>
+        )}
+
+        {/* Basic Information */}
+        <ReviewBasicInfo
+          formData={formData}
+          employees={employees}
+          templates={templates}
+          loading={loading}
+          onInputChange={handleInputChange}
+          errors={errors}
+        />
+
+        {/* Performance Criteria */}
+        <PerformanceCriteriaSection
+          criteria={criteria}
+          onCriteriaChange={handleCriteriaChange}
+          loading={loading}
+          formStatus={formData.status}
+          overallScore={overallScore}
+        />
+
+        {/* Overall Comments */}
+        <OverallCommentsSection
+          formData={formData}
+          onInputChange={handleInputChange}
+          loading={loading}
+          formStatus={formData.status}
+          overallScore={overallScore}
+          completedCriteria={completedCriteria}
+          totalCriteria={criteria.length}
+        />
+
+        {/* Action Buttons */}
+        <ReviewFormActions
+          isEditing={isEditing}
+          loading={loading}
+          formStatus={formData.status}
+          completedCriteria={completedCriteria}
+          totalCriteria={criteria.length}
+          hasUnsavedChanges={hasUnsavedChanges}
+          onSave={handleSave}
+          onSubmit={handleSubmit}
+          lastSaved={lastSaved}
+        />
+      </Container>
+    </>
   );
 };
 
