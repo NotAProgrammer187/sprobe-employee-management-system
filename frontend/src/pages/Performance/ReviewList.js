@@ -23,17 +23,19 @@ import {
   Edit as EditIcon,
   Visibility as ViewIcon,
   Delete as DeleteIcon,
-  Star as StarIcon
+  Star as StarIcon,
+  Person as PersonIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import PerformanceReviewsHeader from '../../components/Performance/PerformanceReviewsHeader';
-import { reviewService } from '../../services';
+import { reviewService, employeeService } from '../../services';
 
 const ReviewsList = () => {
   const navigate = useNavigate();
   
   // State management
   const [reviews, setReviews] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -41,37 +43,67 @@ const ReviewsList = () => {
   const [actionMenuAnchor, setActionMenuAnchor] = useState(null);
   const [selectedReview, setSelectedReview] = useState(null);
 
-  // Load reviews on component mount
+  // Load reviews and employees on component mount
   useEffect(() => {
-    loadReviews();
+    loadReviewsAndEmployees();
   }, []);
 
-  const loadReviews = async () => {
+  const loadReviewsAndEmployees = async () => {
     try {
       setLoading(true);
       setError('');
-      const reviewsData = await reviewService.retrieveReviews();
+      
+      // Load both reviews and employees simultaneously
+      const [reviewsData, employeesData] = await Promise.all([
+        reviewService.retrieveReviews(),
+        employeeService.retrieveActiveEmployees()
+      ]);
+      
       setReviews(reviewsData || []);
+      setEmployees(employeesData || []);
     } catch (err) {
-      setError('Failed to load reviews');
-      console.error('Error loading reviews:', err);
+      setError('Failed to load reviews and employee data');
+      console.error('Error loading data:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  // Filter and search logic
+  // Helper function to get employee by ID
+  const getEmployeeById = (employeeId) => {
+    return employees.find(emp => emp.id === parseInt(employeeId));
+  };
+
+  // Helper function to get full employee name
+  const getEmployeeName = (employeeId) => {
+    const employee = getEmployeeById(employeeId);
+    return employee ? `${employee.first_name}` : 'Unknown Employee';
+  };
+
+  // Helper function to get reviewer name
+  const getReviewerName = (reviewerId) => {
+    const reviewer = getEmployeeById(reviewerId);
+    return reviewer ? `${reviewer.first_name} ${reviewer.last_name}` : 'Unknown Reviewer';
+  };
+
+  // Enhanced filtered reviews with employee data
   const filteredReviews = useMemo(() => {
     let filtered = [...reviews];
 
-    // Apply search filter
+    // Apply search filter (now includes employee and reviewer names)
     if (searchTerm) {
       const search = searchTerm.toLowerCase();
-      filtered = filtered.filter(review => 
-        review.title?.toLowerCase().includes(search) ||
-        review.employee_name?.toLowerCase().includes(search) ||
-        review.status?.toLowerCase().includes(search)
-      );
+      filtered = filtered.filter(review => {
+        const employeeName = getEmployeeName(review.employee_id).toLowerCase();
+        const reviewerName = getReviewerName(review.reviewer_id).toLowerCase();
+        
+        return (
+          review.title?.toLowerCase().includes(search) ||
+          employeeName.includes(search) ||
+          reviewerName.includes(search) ||
+          review.status?.toLowerCase().includes(search)
+        );
+      });
     }
 
     // Apply status filters
@@ -82,7 +114,7 @@ const ReviewsList = () => {
     }
 
     return filtered;
-  }, [reviews, searchTerm, activeFilters]);
+  }, [reviews, employees, searchTerm, activeFilters]);
 
   // Handle filter changes
   const handleFilterChange = (filterValue) => {
@@ -127,7 +159,7 @@ const ReviewsList = () => {
     if (selectedReview) {
       try {
         await reviewService.deleteReview(selectedReview.id);
-        await loadReviews(); // Refresh the list
+        await loadReviewsAndEmployees(); // Refresh the list
       } catch (err) {
         setError('Failed to delete review');
         console.error('Error deleting review:', err);
@@ -149,20 +181,22 @@ const ReviewsList = () => {
   };
 
   // Employee initials helper
-  const getEmployeeInitials = (name) => {
-    if (!name) return '??';
-    const parts = name.split(' ');
-    return parts.length >= 2 
-      ? `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
-      : name.substring(0, 2).toUpperCase();
+  const getEmployeeInitials = (employeeId) => {
+    const employee = getEmployeeById(employeeId);
+    if (!employee) return '??';
+    
+    const firstName = employee.first_name || '';
+    const lastName = employee.last_name || '';
+    
+    return firstName && lastName 
+      ? `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase()
+      : (firstName.substring(0, 2) || lastName.substring(0, 2) || '??').toUpperCase();
   };
 
   // Score display helper
   const renderScore = (score) => {
-    // Convert to number and validate
     const numericScore = parseFloat(score);
     
-    // Return dash if score is invalid, null, undefined, or 0
     if (!score || isNaN(numericScore) || numericScore === 0) {
       return (
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
@@ -177,6 +211,48 @@ const ReviewsList = () => {
         <Typography variant="body2" sx={{ fontWeight: 500 }}>
           {numericScore.toFixed(1)}
         </Typography>
+      </Box>
+    );
+  };
+
+  // Reviewer display component
+  const renderReviewer = (reviewerId) => {
+    const reviewer = getEmployeeById(reviewerId);
+    
+    if (!reviewer) {
+      return (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Avatar sx={{ width: 24, height: 24, bgcolor: 'grey.400', fontSize: '0.75rem' }}>
+            <PersonIcon sx={{ fontSize: '0.75rem' }} />
+          </Avatar>
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            Unknown
+          </Typography>
+        </Box>
+      );
+    }
+
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Avatar 
+          sx={{ 
+            width: 24, 
+            height: 24,
+            bgcolor: 'secondary.main',
+            fontSize: '0.75rem',
+            fontWeight: 600
+          }}
+        >
+          {`${reviewer.first_name?.charAt(0) || ''}${reviewer.last_name?.charAt(0) || ''}`.toUpperCase()}
+        </Avatar>
+        <Box>
+          <Typography variant="body2" sx={{ fontWeight: 500, fontSize: '0.875rem' }}>
+            {`${reviewer.first_name} ${reviewer.last_name}`}
+          </Typography>
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+            {reviewer.role || 'Manager'}
+          </Typography>
+        </Box>
       </Box>
     );
   };
@@ -227,6 +303,7 @@ const ReviewsList = () => {
               <TableRow>
                 <TableCell sx={{ fontWeight: 600, py: 2 }}>Employee</TableCell>
                 <TableCell sx={{ fontWeight: 600, py: 2 }}>Review Title</TableCell>
+                <TableCell sx={{ fontWeight: 600, py: 2 }}>Reviewed By</TableCell>
                 <TableCell sx={{ fontWeight: 600, py: 2 }}>Status</TableCell>
                 <TableCell sx={{ fontWeight: 600, py: 2 }}>Score</TableCell>
                 <TableCell sx={{ fontWeight: 600, py: 2 }}>Review Date</TableCell>
@@ -236,7 +313,7 @@ const ReviewsList = () => {
             <TableBody>
               {filteredReviews.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} sx={{ textAlign: 'center', py: 4 }}>
+                  <TableCell colSpan={7} sx={{ textAlign: 'center', py: 4 }}>
                     <Typography variant="body1" sx={{ color: 'text.secondary' }}>
                       {searchTerm || activeFilters.length > 0 
                         ? 'No reviews match your search criteria'
@@ -248,6 +325,7 @@ const ReviewsList = () => {
               ) : (
                 filteredReviews.map((review) => {
                   const statusConfig = getStatusConfig(review.status);
+                  const employee = getEmployeeById(review.employee_id);
                   
                   return (
                     <TableRow 
@@ -258,30 +336,33 @@ const ReviewsList = () => {
                       }}
                       onClick={() => navigate(`/performance/reviews/${review.id}`)}
                     >
+                      {/* Employee Column */}
                       <TableCell sx={{ py: 2 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                           <Avatar 
                             sx={{ 
                               width: 40, 
                               height: 40,
-                              bgcolor: 'primary.main',
+                              bgcolor: employee ? 'primary.main' : 'grey.400',
                               fontSize: '0.875rem',
                               fontWeight: 600
                             }}
                           >
-                            {getEmployeeInitials(review.employee_name)}
+                            {getEmployeeInitials(review.employee_id)}
                           </Avatar>
                           <Box>
                             <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                              {review.employee_name || 'Unknown Employee'}
+                              {getEmployeeName(review.employee_id)}
                             </Typography>
                             <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                               ID: {review.employee_id}
+                              {employee?.department && ` • ${employee.department}`}
                             </Typography>
                           </Box>
                         </Box>
                       </TableCell>
                       
+                      {/* Review Title Column */}
                       <TableCell sx={{ py: 2 }}>
                         <Typography variant="body2" sx={{ fontWeight: 500 }}>
                           {review.title || 'Untitled Review'}
@@ -292,7 +373,13 @@ const ReviewsList = () => {
                           </Typography>
                         )}
                       </TableCell>
+
+                      {/* Reviewer Column */}
+                      <TableCell sx={{ py: 2 }}>
+                        {renderReviewer(review.reviewer_id)}
+                      </TableCell>
                       
+                      {/* Status Column */}
                       <TableCell sx={{ py: 2 }}>
                         <Chip
                           label={statusConfig.label}
@@ -307,10 +394,12 @@ const ReviewsList = () => {
                         />
                       </TableCell>
                       
+                      {/* Score Column */}
                       <TableCell sx={{ py: 2 }}>
                         {renderScore(review.overall_score)}
                       </TableCell>
                       
+                      {/* Review Date Column */}
                       <TableCell sx={{ py: 2 }}>
                         <Typography variant="body2">
                           {review.review_date 
@@ -320,6 +409,7 @@ const ReviewsList = () => {
                         </Typography>
                       </TableCell>
                       
+                      {/* Actions Column */}
                       <TableCell sx={{ py: 2 }}>
                         <IconButton
                           size="small"

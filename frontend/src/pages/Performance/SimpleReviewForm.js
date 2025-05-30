@@ -6,7 +6,7 @@ import {
   CircularProgress,
   Backdrop
 } from '@mui/material';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { reviewService, employeeService, reviewTemplateService } from '../../services';
 
 // Import our new modular components
@@ -18,7 +18,11 @@ import ReviewFormActions from '../../components/Reviews/ReviewFormActions';
 
 const SimpleReviewForm = () => {
   const { id: reviewId } = useParams();
-  const isEditing = reviewId && reviewId !== 'new';
+  const navigate = useNavigate();
+  
+  // State to track the current review ID (can change after creation)
+  const [currentReviewId, setCurrentReviewId] = useState(reviewId);
+  const isEditing = currentReviewId && currentReviewId !== 'new';
 
   // Basic state
   const [loading, setLoading] = useState(false);
@@ -57,14 +61,14 @@ const SimpleReviewForm = () => {
     loadInitialData();
   }, []);
 
-  // Load review if editing
+  // Load review if editing - watch for currentReviewId changes
   useEffect(() => {
     if (isEditing) {
       loadReview();
     } else {
       setPageLoading(false);
     }
-  }, [reviewId, isEditing]);
+  }, [currentReviewId, isEditing]);
 
   const loadInitialData = async () => {
     try {
@@ -92,7 +96,7 @@ const SimpleReviewForm = () => {
   const loadReview = async () => {
     try {
       setPageLoading(true);
-      const reviewData = await reviewService.retrieveReview(reviewId);
+      const reviewData = await reviewService.retrieveReview(currentReviewId);
       
       setFormData({
         title: reviewData.title || '',
@@ -210,7 +214,7 @@ const SimpleReviewForm = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  // Save review
+  // Save review - FIXED: Properly handle state transitions
   const handleSave = async () => {
     try {
       if (!validateForm()) {
@@ -244,14 +248,33 @@ const SimpleReviewForm = () => {
 
       let result;
       if (isEditing) {
-        result = await reviewService.updateReview(reviewId, reviewData);
+        result = await reviewService.updateReview(currentReviewId, reviewData);
         setSuccess('Review updated successfully');
       } else {
         result = await reviewService.createReview(reviewData);
         setSuccess('Review created successfully');
-        // Navigate to edit mode with the new ID
+        
+        // FIXED: Properly transition to edit mode
         if (result && result.id) {
-          window.history.replaceState(null, '', `/performance/reviews/${result.id}/edit`);
+          // Update the current review ID state
+          setCurrentReviewId(result.id);
+          
+          // Update the URL without causing a page reload
+          navigate(`/performance/reviews/${result.id}/edit`, { replace: true });
+          
+          // Update form data with the created review data
+          setFormData(prev => ({
+            ...prev,
+            ...result,
+            review_date: result.review_date ? result.review_date.split('T')[0] : prev.review_date,
+            review_period_start: result.review_period_start ? result.review_period_start.split('T')[0] : prev.review_period_start,
+            review_period_end: result.review_period_end ? result.review_period_end.split('T')[0] : prev.review_period_end,
+          }));
+          
+          // If criteria were created, update them
+          if (result.reviewCriteria && result.reviewCriteria.length > 0) {
+            setCriteria(result.reviewCriteria);
+          }
         }
       }
       
@@ -265,7 +288,7 @@ const SimpleReviewForm = () => {
     }
   };
 
-  // Submit review
+  // Submit review - FIXED: Use currentReviewId instead of reviewId
   const handleSubmit = async () => {
     try {
       setLoading(true);
@@ -278,10 +301,10 @@ const SimpleReviewForm = () => {
         return;
       }
 
-      await reviewService.submitReview(reviewId);
+      await reviewService.submitReview(currentReviewId);
       setSuccess('Review submitted successfully');
       
-      // Refresh the review data
+      // Refresh the review data to get updated status
       await loadReview();
       setHasUnsavedChanges(false);
     } catch (err) {
