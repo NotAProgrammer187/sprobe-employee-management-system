@@ -15,7 +15,7 @@ class ReviewCriteria extends Model
      *
      * @var string
      */
-    protected $table = 'review_criteria'; // Explicitly specify the table name
+    protected $table = 'review_criteria';
 
     /**
      * The attributes that are mass assignable.
@@ -59,6 +59,16 @@ class ReviewCriteria extends Model
         return $query->orderBy('sort_order');
     }
 
+    public function scopeTemplateOnly($query)
+    {
+        return $query->whereNull('review_id');
+    }
+
+    public function scopeForReview($query, $reviewId)
+    {
+        return $query->where('review_id', $reviewId);
+    }
+
     public function getWeightedScoreAttribute()
     {
         return round($this->score * ($this->weight / 100), 2);
@@ -67,5 +77,10 @@ class ReviewCriteria extends Model
     public function isScored()
     {
         return !is_null($this->score);
+    }
+
+    public function isTemplate()
+    {
+        return is_null($this->review_id);
     }
 }

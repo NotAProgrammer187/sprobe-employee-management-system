@@ -80,7 +80,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{id}', [ReviewTemplateController::class, 'show']);
         Route::put('/{id}', [ReviewTemplateController::class, 'update']);
         Route::delete('/{id}', [ReviewTemplateController::class, 'destroy']);
+        
+        // Template criteria management
         Route::get('/{id}/criteria', [ReviewTemplateController::class, 'getCriteria']);
+        Route::post('/{id}/criteria', [ReviewTemplateController::class, 'addCriteria']);
+        Route::put('/{templateId}/criteria/{criteriaId}', [ReviewTemplateController::class, 'updateCriteria']);
+        Route::delete('/{templateId}/criteria/{criteriaId}', [ReviewTemplateController::class, 'deleteCriteria']);
     });
 
     // Review Criteria routes

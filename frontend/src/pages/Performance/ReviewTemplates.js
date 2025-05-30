@@ -50,7 +50,7 @@ const ReviewTemplates = () => {
       id: null,
       name: '',
       description: '',
-      is_active: true,
+      active: true,
       criteria: []
     }
   });
@@ -79,6 +79,7 @@ const ReviewTemplates = () => {
       setLoading(true);
       setError('');
       const data = await reviewTemplateService.retrieveReviewTemplates();
+      console.log('Loaded templates:', data);
       setTemplates(data);
     } catch (err) {
       setError('Failed to load templates');
@@ -97,28 +98,40 @@ const ReviewTemplates = () => {
         id: null,
         name: '',
         description: '',
-        is_active: true,
+        active: true,
         criteria: []
       }
     });
+    setCriteriaForm({ name: '', description: '', weight: 20 });
   };
 
   const handleEditTemplate = async (templateId) => {
     try {
       setLoading(true);
+      setError('');
+      
+      console.log('Loading template for edit:', templateId);
+      
       const template = await reviewTemplateService.retrieveReviewTemplate(templateId);
       const criteria = await reviewTemplateService.retrieveReviewTemplateCriteria(templateId);
+      
+      console.log('Loaded template:', template);
+      console.log('Loaded criteria:', criteria);
       
       setTemplateDialog({
         open: true,
         mode: 'edit',
         template: {
-          ...template,
+          id: template.id,
+          name: template.name,
+          description: template.description || '',
+          active: template.active,
           criteria: criteria || []
         }
       });
     } catch (err) {
       setError('Failed to load template details');
+      console.error('Error loading template:', err);
     } finally {
       setLoading(false);
     }
@@ -127,6 +140,8 @@ const ReviewTemplates = () => {
   const handleViewTemplate = async (templateId) => {
     try {
       setLoading(true);
+      setError('');
+      
       const template = await reviewTemplateService.retrieveReviewTemplate(templateId);
       const criteria = await reviewTemplateService.retrieveReviewTemplateCriteria(templateId);
       
@@ -134,12 +149,16 @@ const ReviewTemplates = () => {
         open: true,
         mode: 'view',
         template: {
-          ...template,
+          id: template.id,
+          name: template.name,
+          description: template.description || '',
+          active: template.active,
           criteria: criteria || []
         }
       });
     } catch (err) {
       setError('Failed to load template details');
+      console.error('Error loading template:', err);
     } finally {
       setLoading(false);
     }
@@ -148,6 +167,8 @@ const ReviewTemplates = () => {
   const handleCloneTemplate = async (templateId) => {
     try {
       setLoading(true);
+      setError('');
+      
       const template = await reviewTemplateService.retrieveReviewTemplate(templateId);
       const criteria = await reviewTemplateService.retrieveReviewTemplateCriteria(templateId);
       
@@ -157,13 +178,17 @@ const ReviewTemplates = () => {
         template: {
           id: null,
           name: `${template.name} (Copy)`,
-          description: template.description,
-          is_active: true,
-          criteria: criteria || []
+          description: template.description || '',
+          active: true,
+          criteria: criteria?.map(criterion => ({
+            ...criterion,
+            id: null // Remove ID so it's treated as new
+          })) || []
         }
       });
     } catch (err) {
       setError('Failed to load template for cloning');
+      console.error('Error cloning template:', err);
     } finally {
       setLoading(false);
     }
@@ -174,6 +199,9 @@ const ReviewTemplates = () => {
       setLoading(true);
       setError('');
       
+      console.log('Saving template:', templateDialog.template);
+      
+      // Validation
       if (!templateDialog.template.name.trim()) {
         setError('Template name is required');
         return;
@@ -185,32 +213,57 @@ const ReviewTemplates = () => {
       }
 
       // Validate total weight equals 100%
-      const totalWeight = templateDialog.template.criteria.reduce((sum, c) => sum + (c.weight || 0), 0);
-      if (totalWeight !== 100) {
-        setError(`Total criteria weight must equal 100% (current: ${totalWeight}%)`);
+      const totalWeight = templateDialog.template.criteria.reduce((sum, c) => sum + (parseFloat(c.weight) || 0), 0);
+      if (Math.abs(totalWeight - 100) > 0.01) { // Allow for small floating point differences
+        setError(`Total criteria weight must equal 100% (current: ${totalWeight.toFixed(1)}%)`);
         return;
       }
 
       const templateData = {
-        name: templateDialog.template.name,
-        description: templateDialog.template.description,
-        is_active: templateDialog.template.is_active,
-        criteria: templateDialog.template.criteria
+        name: templateDialog.template.name.trim(),
+        description: templateDialog.template.description?.trim() || '',
+        active: templateDialog.template.active,
+        criteria: templateDialog.template.criteria.map((criteria, index) => ({
+          name: criteria.name?.trim() || criteria.criteria_name?.trim(),
+          description: criteria.description?.trim() || criteria.criteria_description?.trim() || '',
+          weight: parseFloat(criteria.weight) || 0
+        }))
       };
 
+      console.log('Prepared template data:', templateData);
+
+      let savedTemplate;
       if (templateDialog.mode === 'edit' && templateDialog.template.id) {
-        await reviewTemplateService.updateReviewTemplate(templateDialog.template.id, templateData);
+        savedTemplate = await reviewTemplateService.updateReviewTemplate(templateDialog.template.id, templateData);
         setSuccess('Template updated successfully');
       } else {
-        await reviewTemplateService.createReviewTemplate(templateData);
+        savedTemplate = await reviewTemplateService.createReviewTemplate(templateData);
         setSuccess('Template created successfully');
       }
 
-      setTemplateDialog({ open: false, mode: 'create', template: { id: null, name: '', description: '', is_active: true, criteria: [] } });
+      console.log('Saved template:', savedTemplate);
+
+      // Close dialog and reload templates
+      setTemplateDialog({ 
+        open: false, 
+        mode: 'create', 
+        template: { id: null, name: '', description: '', active: true, criteria: [] } 
+      });
+      
       await loadTemplates();
+      
     } catch (err) {
-      setError('Failed to save template');
       console.error('Error saving template:', err);
+      
+      if (err.response?.data?.errors) {
+        // Handle validation errors
+        const errorMessages = Object.values(err.response.data.errors).flat().join(', ');
+        setError(`Validation error: ${errorMessages}`);
+      } else if (err.response?.data?.message) {
+        setError(err.response.data.message);
+      } else {
+        setError('Failed to save template');
+      }
     } finally {
       setLoading(false);
     }
@@ -219,6 +272,8 @@ const ReviewTemplates = () => {
   const handleDeleteTemplate = async () => {
     try {
       setLoading(true);
+      setError('');
+      
       await reviewTemplateService.deleteReviewTemplate(deleteDialog.templateId);
       setSuccess('Template deleted successfully');
       setDeleteDialog({ open: false, templateId: null, templateName: '' });
@@ -238,13 +293,20 @@ const ReviewTemplates = () => {
       return;
     }
 
+    if (!criteriaForm.weight || criteriaForm.weight <= 0 || criteriaForm.weight > 100) {
+      setError('Weight must be between 1 and 100');
+      return;
+    }
+
     const newCriteria = {
-      id: `temp_${Date.now()}`,
-      name: criteriaForm.name,
-      description: criteriaForm.description,
-      weight: criteriaForm.weight,
-      sort_order: templateDialog.template.criteria.length
+      id: null, // New criteria don't have IDs yet
+      name: criteriaForm.name.trim(),
+      description: criteriaForm.description?.trim() || '',
+      weight: parseFloat(criteriaForm.weight),
+      sort_order: templateDialog.template.criteria.length + 1
     };
+
+    console.log('Adding new criteria:', newCriteria);
 
     setTemplateDialog(prev => ({
       ...prev,
@@ -254,10 +316,14 @@ const ReviewTemplates = () => {
       }
     }));
 
+    // Reset form
     setCriteriaForm({ name: '', description: '', weight: 20 });
+    setError(''); // Clear any previous errors
   };
 
   const handleEditCriteria = (index, field, value) => {
+    console.log('Editing criteria:', index, field, value);
+    
     setTemplateDialog(prev => ({
       ...prev,
       template: {
@@ -270,6 +336,8 @@ const ReviewTemplates = () => {
   };
 
   const handleRemoveCriteria = (index) => {
+    console.log('Removing criteria at index:', index);
+    
     setTemplateDialog(prev => ({
       ...prev,
       template: {
@@ -284,7 +352,7 @@ const ReviewTemplates = () => {
   };
 
   const getTotalWeight = () => {
-    return templateDialog.template.criteria.reduce((sum, c) => sum + (c.weight || 0), 0);
+    return templateDialog.template.criteria.reduce((sum, c) => sum + (parseFloat(c.weight) || 0), 0);
   };
 
   if (loading && templates.length === 0) {
@@ -318,6 +386,7 @@ const ReviewTemplates = () => {
           variant="contained"
           startIcon={<AddIcon />}
           onClick={handleCreateTemplate}
+          disabled={loading}
         >
           New Template
         </Button>
@@ -334,8 +403,8 @@ const ReviewTemplates = () => {
                     {template.name}
                   </Typography>
                   <Chip
-                    label={template.is_active ? 'Active' : 'Inactive'}
-                    color={template.is_active ? 'success' : 'default'}
+                    label={template.active ? 'Active' : 'Inactive'}
+                    color={template.active ? 'success' : 'default'}
                     size="small"
                   />
                 </Box>
@@ -356,17 +425,17 @@ const ReviewTemplates = () => {
               
               <CardActions>
                 <Tooltip title="View">
-                  <IconButton size="small" onClick={() => handleViewTemplate(template.id)}>
+                  <IconButton size="small" onClick={() => handleViewTemplate(template.id)} disabled={loading}>
                     <ViewIcon />
                   </IconButton>
                 </Tooltip>
                 <Tooltip title="Edit">
-                  <IconButton size="small" onClick={() => handleEditTemplate(template.id)}>
+                  <IconButton size="small" onClick={() => handleEditTemplate(template.id)} disabled={loading}>
                     <EditIcon />
                   </IconButton>
                 </Tooltip>
                 <Tooltip title="Clone">
-                  <IconButton size="small" onClick={() => handleCloneTemplate(template.id)}>
+                  <IconButton size="small" onClick={() => handleCloneTemplate(template.id)} disabled={loading}>
                     <CloneIcon />
                   </IconButton>
                 </Tooltip>
@@ -378,6 +447,7 @@ const ReviewTemplates = () => {
                       templateId: template.id,
                       templateName: template.name
                     })}
+                    disabled={loading}
                   >
                     <DeleteIcon />
                   </IconButton>
@@ -388,10 +458,28 @@ const ReviewTemplates = () => {
         ))}
       </Grid>
 
+      {templates.length === 0 && !loading && (
+        <Box sx={{ textAlign: 'center', py: 4 }}>
+          <Typography variant="h6" color="text.secondary">
+            No templates found
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Create your first review template to get started
+          </Typography>
+          <Button variant="contained" onClick={handleCreateTemplate}>
+            Create Template
+          </Button>
+        </Box>
+      )}
+
       {/* Template Form Dialog */}
       <Dialog
         open={templateDialog.open}
-        onClose={() => setTemplateDialog({ open: false, mode: 'create', template: { id: null, name: '', description: '', is_active: true, criteria: [] } })}
+        onClose={() => !loading && setTemplateDialog({ 
+          open: false, 
+          mode: 'create', 
+          template: { id: null, name: '', description: '', active: true, criteria: [] } 
+        })}
         maxWidth="md"
         fullWidth
       >
@@ -411,7 +499,8 @@ const ReviewTemplates = () => {
                 template: { ...prev.template, name: e.target.value }
               }))}
               sx={{ mb: 2 }}
-              disabled={templateDialog.mode === 'view'}
+              disabled={templateDialog.mode === 'view' || loading}
+              required
             />
             
             <TextField
@@ -425,18 +514,18 @@ const ReviewTemplates = () => {
                 template: { ...prev.template, description: e.target.value }
               }))}
               sx={{ mb: 2 }}
-              disabled={templateDialog.mode === 'view'}
+              disabled={templateDialog.mode === 'view' || loading}
             />
             
             <FormControlLabel
               control={
                 <Switch
-                  checked={templateDialog.template.is_active}
+                  checked={templateDialog.template.active}
                   onChange={(e) => setTemplateDialog(prev => ({
                     ...prev,
-                    template: { ...prev.template, is_active: e.target.checked }
+                    template: { ...prev.template, active: e.target.checked }
                   }))}
-                  disabled={templateDialog.mode === 'view'}
+                  disabled={templateDialog.mode === 'view' || loading}
                 />
               }
               label="Active"
@@ -448,8 +537,8 @@ const ReviewTemplates = () => {
               Review Criteria
               {templateDialog.template.criteria.length > 0 && (
                 <Chip
-                  label={`Total Weight: ${getTotalWeight()}%`}
-                  color={getTotalWeight() === 100 ? 'success' : 'warning'}
+                  label={`Total Weight: ${getTotalWeight().toFixed(1)}%`}
+                  color={Math.abs(getTotalWeight() - 100) < 0.01 ? 'success' : 'warning'}
                   size="small"
                   sx={{ ml: 1 }}
                 />
@@ -470,6 +559,7 @@ const ReviewTemplates = () => {
                       value={criteriaForm.name}
                       onChange={(e) => setCriteriaForm(prev => ({ ...prev, name: e.target.value }))}
                       size="small"
+                      disabled={loading}
                     />
                   </Grid>
                   <Grid item xs={12} md={4}>
@@ -479,6 +569,7 @@ const ReviewTemplates = () => {
                       value={criteriaForm.description}
                       onChange={(e) => setCriteriaForm(prev => ({ ...prev, description: e.target.value }))}
                       size="small"
+                      disabled={loading}
                     />
                   </Grid>
                   <Grid item xs={12} md={2}>
@@ -487,9 +578,10 @@ const ReviewTemplates = () => {
                       label="Weight (%)"
                       type="number"
                       value={criteriaForm.weight}
-                      onChange={(e) => setCriteriaForm(prev => ({ ...prev, weight: parseInt(e.target.value) || 0 }))}
+                      onChange={(e) => setCriteriaForm(prev => ({ ...prev, weight: parseFloat(e.target.value) || 0 }))}
                       size="small"
-                      inputProps={{ min: 1, max: 100 }}
+                      inputProps={{ min: 1, max: 100, step: 0.1 }}
+                      disabled={loading}
                     />
                   </Grid>
                   <Grid item xs={12} md={1}>
@@ -498,6 +590,7 @@ const ReviewTemplates = () => {
                       variant="outlined"
                       onClick={handleAddCriteria}
                       size="small"
+                      disabled={loading}
                     >
                       Add
                     </Button>
@@ -509,7 +602,7 @@ const ReviewTemplates = () => {
             {/* Existing Criteria List */}
             <List>
               {templateDialog.template.criteria.map((criteria, index) => (
-                <React.Fragment key={criteria.id || index}>
+                <React.Fragment key={criteria.id || `criteria-${index}`}>
                   <ListItem
                     sx={{
                       border: 1,
@@ -521,37 +614,40 @@ const ReviewTemplates = () => {
                     <ListItemText
                       primary={
                         templateDialog.mode === 'view' ? (
-                          criteria.name
+                          criteria.name || criteria.criteria_name
                         ) : (
                           <TextField
-                            value={criteria.name}
+                            value={criteria.name || criteria.criteria_name || ''}
                             onChange={(e) => handleEditCriteria(index, 'name', e.target.value)}
                             variant="standard"
                             fullWidth
+                            disabled={loading}
                           />
                         )
                       }
                       secondary={
                         templateDialog.mode === 'view' ? (
-                          `${criteria.description} (Weight: ${criteria.weight}%)`
+                          `${criteria.description || criteria.criteria_description || 'No description'} (Weight: ${criteria.weight}%)`
                         ) : (
                           <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
                             <TextField
-                              value={criteria.description}
+                              value={criteria.description || criteria.criteria_description || ''}
                               onChange={(e) => handleEditCriteria(index, 'description', e.target.value)}
                               placeholder="Description"
                               variant="standard"
                               size="small"
                               sx={{ flexGrow: 1 }}
+                              disabled={loading}
                             />
                             <TextField
-                              value={criteria.weight}
-                              onChange={(e) => handleEditCriteria(index, 'weight', parseInt(e.target.value) || 0)}
+                              value={criteria.weight || 0}
+                              onChange={(e) => handleEditCriteria(index, 'weight', parseFloat(e.target.value) || 0)}
                               type="number"
-                              inputProps={{ min: 1, max: 100 }}
+                              inputProps={{ min: 1, max: 100, step: 0.1 }}
                               variant="standard"
                               size="small"
                               sx={{ width: 80 }}
+                              disabled={loading}
                             />
                           </Box>
                         )
@@ -563,6 +659,7 @@ const ReviewTemplates = () => {
                           edge="end"
                           onClick={() => handleRemoveCriteria(index)}
                           size="small"
+                          disabled={loading}
                         >
                           <DeleteIcon />
                         </IconButton>
@@ -582,7 +679,12 @@ const ReviewTemplates = () => {
         </DialogContent>
         <DialogActions>
           <Button
-            onClick={() => setTemplateDialog({ open: false, mode: 'create', template: { id: null, name: '', description: '', is_active: true, criteria: [] } })}
+            onClick={() => setTemplateDialog({ 
+              open: false, 
+              mode: 'create', 
+              template: { id: null, name: '', description: '', active: true, criteria: [] } 
+            })}
+            disabled={loading}
           >
             {templateDialog.mode === 'view' ? 'Close' : 'Cancel'}
           </Button>
@@ -592,7 +694,7 @@ const ReviewTemplates = () => {
               variant="contained"
               disabled={loading}
             >
-              {templateDialog.mode === 'edit' ? 'Update' : 'Create'}
+              {loading ? <CircularProgress size={20} /> : (templateDialog.mode === 'edit' ? 'Update' : 'Create')}
             </Button>
           )}
         </DialogActions>
@@ -601,7 +703,7 @@ const ReviewTemplates = () => {
       {/* Delete Confirmation Dialog */}
       <Dialog
         open={deleteDialog.open}
-        onClose={() => setDeleteDialog({ open: false, templateId: null, templateName: '' })}
+        onClose={() => !loading && setDeleteDialog({ open: false, templateId: null, templateName: '' })}
       >
         <DialogTitle>Confirm Delete</DialogTitle>
         <DialogContent>
@@ -613,6 +715,7 @@ const ReviewTemplates = () => {
         <DialogActions>
           <Button
             onClick={() => setDeleteDialog({ open: false, templateId: null, templateName: '' })}
+            disabled={loading}
           >
             Cancel
           </Button>
@@ -622,7 +725,7 @@ const ReviewTemplates = () => {
             variant="contained"
             disabled={loading}
           >
-            Delete
+            {loading ? <CircularProgress size={20} /> : 'Delete'}
           </Button>
         </DialogActions>
       </Dialog>
