@@ -56,7 +56,7 @@ const DashboardRouter = () => {
     case USER_ROLES.ADMIN:
       return <AdminDashboard />;
     case USER_ROLES.MANAGER:
-      return <ManagerDashboard />;
+      return <Navigate to="/performance/" replace />;
     case USER_ROLES.EMPLOYEE:
       return <EmployeeDashboard />;
     default:
