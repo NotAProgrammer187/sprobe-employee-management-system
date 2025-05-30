@@ -16,56 +16,41 @@ import Register from './pages/Auth/Register';
 import AdminDashboard from './pages/Admin/AdminDashboard';
 import PerformanceMain from './pages/Performance/PerformanceMain';
 import ManagerDashboard from './pages/Performance/ManagerDashboard';
+import EmployeeDashboard from './pages/Performance/EmployeeDashboard';
 
-// Employee Dashboard for regular employees
-const EmployeeDashboard = () => {
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
-  
-  const handleLogout = async () => {
-    localStorage.removeItem('token');
+// Helper function to safely parse user data
+const safeParseUser = () => {
+  try {
+    const userData = localStorage.getItem('user');
+    
+    if (!userData || userData === 'undefined' || userData === 'null') {
+      return null;
+    }
+    
+    const parsed = JSON.parse(userData);
+    
+    if (!parsed || typeof parsed !== 'object' || !parsed.role) {
+      return null;
+    }
+    
+    return parsed;
+  } catch (error) {
+    console.error('Error parsing user data from localStorage:', error);
     localStorage.removeItem('user');
-    window.location.href = '/login';
-  };
-
-  return (
-    <div style={{ padding: '2rem', textAlign: 'center' }}>
-      <h1>Welcome to Employee Management System</h1>
-      <p>You are successfully logged in as {user?.role}!</p>
-      <p>Welcome, {user?.name}</p>
-      
-      {/* Employee-specific information */}
-      <div style={{ marginTop: '2rem', textAlign: 'left', maxWidth: '500px', margin: '2rem auto' }}>
-        <h3>Employee Dashboard</h3>
-        <p>As an employee, you can:</p>
-        <ul>
-          <li>View your performance reviews</li>
-          <li>Update your profile information</li>
-          <li>View company announcements</li>
-          <li>Access employee resources</li>
-        </ul>
-      </div>
-      
-      <button 
-        onClick={handleLogout}
-        style={{
-          padding: '0.5rem 1rem',
-          backgroundColor: '#ef4444',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer',
-          marginTop: '1rem'
-        }}
-      >
-        Logout
-      </button>
-    </div>
-  );
+    localStorage.removeItem('token');
+    return null;
+  }
 };
 
 // Dashboard Router - decides which dashboard to show based on role
 const DashboardRouter = () => {
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const user = safeParseUser();
+  
+  // If no valid user data, redirect to login
+  if (!user) {
+    window.location.href = '/login';
+    return null;
+  }
   
   switch (user.role) {
     case USER_ROLES.ADMIN:
