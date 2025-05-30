@@ -8,7 +8,9 @@ import ProtectedRoute from './components/Auth/ProtectedRoute';
 // Pages
 import Login from './pages/Auth/Login';
 import Register from './pages/Auth/Register';
+import AdminDashboard from './pages/Admin/AdminDashboard';
 
+// Regular Dashboard for non-admin users
 const Dashboard = () => {
   return (
     <div style={{ padding: '2rem', textAlign: 'center' }}>
@@ -34,6 +36,17 @@ const Dashboard = () => {
   );
 };
 
+// Dashboard Router - decides which dashboard to show based on role
+const DashboardRouter = () => {
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  
+  if (user.role === 'admin') {
+    return <AdminDashboard />;
+  }
+  
+  return <Dashboard />;
+};
+
 function App() {
   return (
     <AuthProvider>
@@ -47,7 +60,7 @@ function App() {
             {/* Protected Routes */}
             <Route path="/" element={
               <ProtectedRoute>
-                <Dashboard />
+                <DashboardRouter />
               </ProtectedRoute>
             } />
             
