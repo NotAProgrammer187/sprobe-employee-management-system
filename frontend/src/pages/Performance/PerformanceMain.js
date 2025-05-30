@@ -164,6 +164,7 @@ const PerformanceMain = () => {
         <Route path="/" element={<PerformanceDashboard />} />
         
         {/* Reviews */}
+        <Route path="/reviews" element={<ReviewsList />} />
         <Route path="/reviews/new" element={<SimpleReviewForm />} />
         <Route path="/reviews/:id/edit" element={<SimpleReviewForm />} />
         <Route path="/reviews/:id" element={<SimpleReviewForm />} />
