@@ -11,6 +11,13 @@ class ReviewCriteria extends Model
     use HasFactory, SoftDeletes;
 
     /**
+     * The table associated with the model.
+     *
+     * @var string
+     */
+    protected $table = 'review_criteria'; // Explicitly specify the table name
+
+    /**
      * The attributes that are mass assignable.
      *
      * @var array<int, string>

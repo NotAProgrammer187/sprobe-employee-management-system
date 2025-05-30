@@ -8,7 +8,7 @@ const DEFAULT_REVIEW = {
   description: '',
   review_period_start: null,
   review_period_end: null,
-  review_date: new Date(),
+  review_date: new Date().toISOString().split('T')[0], // Use YYYY-MM-DD format
   status: 'draft',
   overall_comments: '',
   overall_score: 0
@@ -31,30 +31,38 @@ export const useReviewForm = (reviewId) => {
       // Load employees and templates
       const [employeesData, templatesData] = await Promise.all([
         employeeService.retrieveActiveEmployees(),
-        reviewTemplateService.retrieveActiveReviewTemplates()
+        reviewTemplateService.retrieveReviewTemplates()
       ]);
       
-      setEmployees(employeesData);
-      setTemplates(templatesData);
+      setEmployees(employeesData || []);
+      setTemplates(templatesData || []);
 
       // Load existing review if editing
-      if (reviewId) {
-        const [reviewData, criteriaData] = await Promise.all([
-          reviewService.retrieveReview(reviewId),
-          reviewCriteriaService.retrieveCriteriaByReview(reviewId)
-        ]);
+      if (reviewId && reviewId !== 'new') {
+        try {
+          const [reviewData, criteriaData] = await Promise.all([
+            reviewService.retrieveReview(reviewId),
+            reviewCriteriaService.retrieveCriteriaByReview(reviewId)
+          ]);
 
-        setReview({
-          ...reviewData,
-          review_period_start: reviewData.review_period_start ? new Date(reviewData.review_period_start) : null,
-          review_period_end: reviewData.review_period_end ? new Date(reviewData.review_period_end) : null,
-          review_date: new Date(reviewData.review_date)
-        });
-        setCriteria(criteriaData || []);
+          setReview({
+            ...reviewData,
+            review_period_start: reviewData.review_period_start ? 
+              (typeof reviewData.review_period_start === 'string' ? reviewData.review_period_start.split('T')[0] : reviewData.review_period_start) : null,
+            review_period_end: reviewData.review_period_end ? 
+              (typeof reviewData.review_period_end === 'string' ? reviewData.review_period_end.split('T')[0] : reviewData.review_period_end) : null,
+            review_date: reviewData.review_date ? 
+              (typeof reviewData.review_date === 'string' ? reviewData.review_date.split('T')[0] : reviewData.review_date) : new Date().toISOString().split('T')[0]
+          });
+          setCriteria(criteriaData || []);
+        } catch (err) {
+          console.error('Error loading existing review:', err);
+          setError('Failed to load review data');
+        }
       }
     } catch (err) {
-      setError('Failed to load review data');
-      console.error('Error loading review:', err);
+      setError('Failed to load initial data');
+      console.error('Error loading review form data:', err);
     } finally {
       setLoading(false);
     }
@@ -65,7 +73,7 @@ export const useReviewForm = (reviewId) => {
     
     // Auto-generate title when employee changes
     if (field === 'employee_id' && value) {
-      const employee = employees.find(emp => emp.id === value);
+      const employee = employees.find(emp => emp.id === parseInt(value));
       if (employee) {
         setReview(prev => ({
           ...prev,
@@ -86,21 +94,53 @@ export const useReviewForm = (reviewId) => {
       setLoading(true);
       const templateCriteria = await reviewTemplateService.retrieveReviewTemplateCriteria(templateId);
       
-      const newCriteria = templateCriteria.map((criteriaTemplate, index) => ({
-        id: `temp_${index}`,
-        criteria_name: criteriaTemplate.criteria_name || criteriaTemplate.name,
-        criteria_description: criteriaTemplate.criteria_description || criteriaTemplate.description,
-        weight: criteriaTemplate.weight || 20,
-        score: 0,
-        comments: '',
-        sort_order: index,
-        max_score: 5
-      }));
-      
-      setCriteria(newCriteria);
+      if (templateCriteria && Array.isArray(templateCriteria)) {
+        const newCriteria = templateCriteria.map((criteriaTemplate, index) => ({
+          id: `temp_${index}`,
+          criteria_name: criteriaTemplate.criteria_name || criteriaTemplate.name || `Criteria ${index + 1}`,
+          criteria_description: criteriaTemplate.criteria_description || criteriaTemplate.description || '',
+          weight: criteriaTemplate.weight || 20,
+          score: 0,
+          comments: '',
+          sort_order: criteriaTemplate.sort_order || index,
+          max_score: 5
+        }));
+        
+        setCriteria(newCriteria);
+      } else {
+        // If no template criteria found, create default criteria
+        const defaultCriteria = [
+          {
+            id: 'temp_0',
+            criteria_name: 'Overall Performance',
+            criteria_description: 'General assessment of employee performance',
+            weight: 100,
+            score: 0,
+            comments: '',
+            sort_order: 0,
+            max_score: 5
+          }
+        ];
+        setCriteria(defaultCriteria);
+      }
     } catch (err) {
       setError('Failed to load template criteria');
       console.error('Error loading template criteria:', err);
+      
+      // Create default criteria on error
+      const defaultCriteria = [
+        {
+          id: 'temp_0',
+          criteria_name: 'Overall Performance',
+          criteria_description: 'General assessment of employee performance',
+          weight: 100,
+          score: 0,
+          comments: '',
+          sort_order: 0,
+          max_score: 5
+        }
+      ];
+      setCriteria(defaultCriteria);
     } finally {
       setLoading(false);
     }
@@ -125,13 +165,13 @@ export const useReviewForm = (reviewId) => {
     return Math.round(weightedScore * 10) / 10;
   }, [criteria]);
 
-  const saveReview = useCallback(async () => {
+  const saveReview = useCallback(async (customReview = null) => {
     try {
       setLoading(true);
       setError('');
       
       const reviewData = {
-        ...review,
+        ...(customReview || review),
         overall_score: calculateOverallScore(),
         criteria: criteria.map(c => ({
           criteria_name: c.criteria_name,
@@ -143,16 +183,23 @@ export const useReviewForm = (reviewId) => {
         }))
       };
 
-      const result = reviewId 
+      const result = reviewId && reviewId !== 'new'
         ? await reviewService.updateReview(reviewId, reviewData)
         : await reviewService.createReview(reviewData);
       
       setSuccess('Review saved successfully');
+      
+      // Update the review state with the returned data
+      if (result && result.id) {
+        setReview(prev => ({ ...prev, id: result.id }));
+      }
+      
       return { success: true, data: result };
     } catch (err) {
-      setError('Failed to save review');
+      const errorMessage = err.response?.data?.message || 'Failed to save review';
+      setError(errorMessage);
       console.error('Error saving review:', err);
-      return { success: false };
+      return { success: false, error: errorMessage };
     } finally {
       setLoading(false);
     }
@@ -162,31 +209,43 @@ export const useReviewForm = (reviewId) => {
     try {
       setLoading(true);
       setError('');
-      await reviewService.submitReview(reviewId);
+      
+      // Ensure we have a valid review ID
+      if (!review.id && (!reviewId || reviewId === 'new')) {
+        setError('Please save the review first before submitting');
+        return;
+      }
+      
+      const idToUse = review.id || reviewId;
+      await reviewService.submitReview(idToUse);
       setSuccess('Review submitted for approval');
       await loadReview(); // Refresh data
     } catch (err) {
-      setError('Failed to submit review');
+      const errorMessage = err.response?.data?.message || 'Failed to submit review';
+      setError(errorMessage);
       console.error('Error submitting review:', err);
     } finally {
       setLoading(false);
     }
-  }, [reviewId, loadReview]);
+  }, [review.id, reviewId, loadReview]);
 
   const approveReview = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
-      await reviewService.approveReview(reviewId);
+      
+      const idToUse = review.id || reviewId;
+      await reviewService.approveReview(idToUse);
       setSuccess('Review approved successfully');
       await loadReview(); // Refresh data
     } catch (err) {
-      setError('Failed to approve review');
+      const errorMessage = err.response?.data?.message || 'Failed to approve review';
+      setError(errorMessage);
       console.error('Error approving review:', err);
     } finally {
       setLoading(false);
     }
-  }, [reviewId, loadReview]);
+  }, [review.id, reviewId, loadReview]);
 
   return {
     review,

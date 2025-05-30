@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Review;
+use App\Models\ReviewCriteria;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class ReviewController extends Controller
 {
@@ -151,9 +153,40 @@ class ReviewController extends Controller
                 'review_date' => 'required|date',
                 'status' => 'required|in:draft,pending,completed,approved,rejected',
                 'overall_comments' => 'nullable|string',
+                'criteria' => 'nullable|array',
+                'criteria.*.criteria_name' => 'required|string',
+                'criteria.*.criteria_description' => 'nullable|string',
+                'criteria.*.weight' => 'nullable|numeric',
+                'criteria.*.score' => 'nullable|numeric',
+                'criteria.*.comments' => 'nullable|string',
+                'criteria.*.sort_order' => 'nullable|integer'
             ]);
 
+            DB::beginTransaction();
+
+            // Create the review
             $review = Review::create($validatedData);
+
+            // Create criteria if provided
+            if (!empty($validatedData['criteria'])) {
+                foreach ($validatedData['criteria'] as $criteriaData) {
+                    ReviewCriteria::create([
+                        'review_id' => $review->id,
+                        'review_template_id' => $review->review_template_id,
+                        'criteria_name' => $criteriaData['criteria_name'],
+                        'criteria_description' => $criteriaData['criteria_description'] ?? null,
+                        'weight' => $criteriaData['weight'] ?? 0,
+                        'score' => $criteriaData['score'] ?? 0,
+                        'comments' => $criteriaData['comments'] ?? null,
+                        'sort_order' => $criteriaData['sort_order'] ?? 0
+                    ]);
+                }
+            }
+
+            DB::commit();
+
+            // Load the review with relationships
+            $review = Review::with(['employee', 'reviewer', 'reviewTemplate', 'reviewCriteria'])->find($review->id);
 
             return response()->json([
                 'success' => true,
@@ -161,6 +194,7 @@ class ReviewController extends Controller
                 'message' => 'Review created successfully'
             ], 201);
         } catch (\Exception $e) {
+            DB::rollBack();
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to create review',
@@ -187,9 +221,44 @@ class ReviewController extends Controller
                 'status' => 'sometimes|required|in:draft,pending,completed,approved,rejected',
                 'overall_score' => 'nullable|numeric|min:0|max:5',
                 'overall_comments' => 'nullable|string',
+                'criteria' => 'nullable|array',
+                'criteria.*.criteria_name' => 'required|string',
+                'criteria.*.criteria_description' => 'nullable|string',
+                'criteria.*.weight' => 'nullable|numeric',
+                'criteria.*.score' => 'nullable|numeric',
+                'criteria.*.comments' => 'nullable|string',
+                'criteria.*.sort_order' => 'nullable|integer'
             ]);
 
+            DB::beginTransaction();
+
+            // Update the review
             $review->update($validatedData);
+
+            // Update criteria if provided
+            if (isset($validatedData['criteria'])) {
+                // Delete existing criteria
+                ReviewCriteria::where('review_id', $review->id)->delete();
+                
+                // Create new criteria
+                foreach ($validatedData['criteria'] as $criteriaData) {
+                    ReviewCriteria::create([
+                        'review_id' => $review->id,
+                        'review_template_id' => $review->review_template_id,
+                        'criteria_name' => $criteriaData['criteria_name'],
+                        'criteria_description' => $criteriaData['criteria_description'] ?? null,
+                        'weight' => $criteriaData['weight'] ?? 0,
+                        'score' => $criteriaData['score'] ?? 0,
+                        'comments' => $criteriaData['comments'] ?? null,
+                        'sort_order' => $criteriaData['sort_order'] ?? 0
+                    ]);
+                }
+            }
+
+            DB::commit();
+
+            // Load the updated review with relationships
+            $review = Review::with(['employee', 'reviewer', 'reviewTemplate', 'reviewCriteria'])->find($review->id);
 
             return response()->json([
                 'success' => true,
@@ -197,6 +266,7 @@ class ReviewController extends Controller
                 'message' => 'Review updated successfully'
             ]);
         } catch (\Exception $e) {
+            DB::rollBack();
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to update review',
@@ -210,13 +280,23 @@ class ReviewController extends Controller
     {
         try {
             $review = Review::findOrFail($id);
+            
+            DB::beginTransaction();
+            
+            // Delete associated criteria
+            ReviewCriteria::where('review_id', $review->id)->delete();
+            
+            // Delete the review
             $review->delete();
+            
+            DB::commit();
 
             return response()->json([
                 'success' => true,
                 'message' => 'Review deleted successfully'
             ]);
         } catch (\Exception $e) {
+            DB::rollBack();
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to delete review',
@@ -230,6 +310,25 @@ class ReviewController extends Controller
     {
         try {
             $review = Review::findOrFail($id);
+            
+            // Validate that review has criteria with scores
+            $criteria = ReviewCriteria::where('review_id', $id)->get();
+            if ($criteria->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cannot submit review without criteria'
+                ], 400);
+            }
+
+            // Check if all criteria have scores
+            $unscored = $criteria->where('score', 0)->count();
+            if ($unscored > 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'All criteria must be scored before submitting'
+                ], 400);
+            }
+
             $review->update(['status' => 'completed']);
 
             return response()->json([
@@ -262,6 +361,35 @@ class ReviewController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to approve review',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    // Reject review
+    public function reject(Request $request, $id)
+    {
+        try {
+            $review = Review::findOrFail($id);
+            
+            $validatedData = $request->validate([
+                'reason' => 'required|string'
+            ]);
+            
+            $review->update([
+                'status' => 'rejected',
+                'overall_comments' => $review->overall_comments . "\n\nRejection Reason: " . $validatedData['reason']
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'data' => $review,
+                'message' => 'Review rejected successfully'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to reject review',
                 'error' => $e->getMessage()
             ], 500);
         }

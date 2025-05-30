@@ -14,6 +14,9 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             AdminSeeder::class,
+            EmployeeSeeder::class,
+            ReviewCriteriaSeeder::class, // Your existing basic seeder
+            CriteriaTemplateSeeder::class, // New comprehensive criteria seeder
         ]);
     }
 }

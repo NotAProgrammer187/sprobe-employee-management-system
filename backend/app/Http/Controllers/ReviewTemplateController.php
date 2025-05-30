@@ -16,9 +16,13 @@ class ReviewTemplateController extends Controller
         try {
             $query = ReviewTemplate::query();
 
-            // Apply filters if provided
-            if ($request->has('is_active')) {
-                $query->where('is_active', $request->boolean('is_active'));
+            // Apply filters if provided - Fixed field name from 'is_active' to 'active'
+            if ($request->has('active')) {
+                $query->where('active', $request->boolean('active'));
+            }
+
+            if ($request->has('type')) {
+                $query->where('type', $request->type);
             }
 
             if ($request->has('search')) {
@@ -75,8 +79,9 @@ class ReviewTemplateController extends Controller
             $validatedData = $request->validate([
                 'name' => 'required|string|max:255',
                 'description' => 'nullable|string',
-                'is_active' => 'boolean',
-                'template_data' => 'nullable|json'
+                'type' => 'nullable|string|max:100',
+                'active' => 'boolean', // Fixed field name
+                'criteria_structure' => 'nullable|array' // Fixed field name
             ]);
 
             $template = ReviewTemplate::create($validatedData);
@@ -106,8 +111,9 @@ class ReviewTemplateController extends Controller
             $validatedData = $request->validate([
                 'name' => 'sometimes|required|string|max:255',
                 'description' => 'nullable|string',
-                'is_active' => 'boolean',
-                'template_data' => 'nullable|json'
+                'type' => 'nullable|string|max:100',
+                'active' => 'boolean', // Fixed field name
+                'criteria_structure' => 'nullable|array' // Fixed field name
             ]);
 
             $template->update($validatedData);
@@ -165,7 +171,7 @@ class ReviewTemplateController extends Controller
         try {
             $template = ReviewTemplate::findOrFail($id);
             $criteria = $template->reviewCriteria()
-                                ->orderBy('order')
+                                ->orderBy('sort_order') // Fixed column name from 'order' to 'sort_order'
                                 ->get();
 
             return response()->json([
