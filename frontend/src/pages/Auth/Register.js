@@ -43,6 +43,7 @@ const Register = () => {
       email: '',
       password: '',
       password_confirmation: '',
+      role: 'employee'
     },
     registerValidation
   );
