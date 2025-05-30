@@ -4,118 +4,180 @@ namespace App\Http\Controllers;
 
 use App\Models\ReviewTemplate;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
+use Illuminate\Http\JsonResponse;
 
 class ReviewTemplateController extends Controller
 {
     /**
-     * Display a listing of review templates
+     * Get all review templates
      */
-    public function index(Request $request)
+    public function index(Request $request): JsonResponse
     {
-        $query = ReviewTemplate::query();
+        try {
+            $query = ReviewTemplate::query();
 
-        // Filter by status if provided
-        if ($request->has('status')) {
-            $query->where('status', $request->status);
-        }
+            // Apply filters if provided
+            if ($request->has('is_active')) {
+                $query->where('is_active', $request->boolean('is_active'));
+            }
 
-        // Search by name or description
-        if ($request->has('search')) {
-            $search = $request->search;
-            $query->where(function($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('description', 'like', "%{$search}%");
-            });
-        }
+            if ($request->has('search')) {
+                $search = $request->search;
+                $query->where(function($q) use ($search) {
+                    $q->where('name', 'like', "%{$search}%")
+                      ->orWhere('description', 'like', "%{$search}%");
+                });
+            }
 
-        $templates = $query->withCount('reviewCriteria')
-            ->orderBy('created_at', 'desc')
-            ->paginate($request->per_page ?? 15);
+            $templates = $query->orderBy('name')->get();
 
-        return response()->json($templates);
-    }
-
-    /**
-     * Store a newly created review template
-     */
-    public function store(Request $request)
-    {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255|unique:review_templates',
-            'description' => 'nullable|string',
-            'status' => 'required|in:active,inactive',
-        ]);
-
-        $template = ReviewTemplate::create($validated);
-
-        return response()->json([
-            'message' => 'Review template created successfully',
-            'data' => $template
-        ], Response::HTTP_CREATED);
-    }
-
-    /**
-     * Display the specified review template
-     */
-    public function show(ReviewTemplate $reviewTemplate)
-    {
-        return response()->json([
-            'data' => $reviewTemplate->load('reviewCriteria')
-        ]);
-    }
-
-    /**
-     * Update the specified review template
-     */
-    public function update(Request $request, ReviewTemplate $reviewTemplate)
-    {
-        $validated = $request->validate([
-            'name' => 'sometimes|required|string|max:255|unique:review_templates,name,' . $reviewTemplate->id,
-            'description' => 'nullable|string',
-            'status' => 'sometimes|required|in:active,inactive',
-        ]);
-
-        $reviewTemplate->update($validated);
-
-        return response()->json([
-            'message' => 'Review template updated successfully',
-            'data' => $reviewTemplate
-        ]);
-    }
-
-    /**
-     * Remove the specified review template
-     */
-    public function destroy(ReviewTemplate $reviewTemplate)
-    {
-        // Check if template is being used in reviews
-        if ($reviewTemplate->reviews()->count() > 0) {
             return response()->json([
-                'message' => 'Cannot delete template that is being used in reviews. Please set status to inactive instead.'
-            ], Response::HTTP_CONFLICT);
+                'success' => true,
+                'data' => $templates
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve review templates',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        // Delete associated criteria first
-        $reviewTemplate->reviewCriteria()->delete();
-        $reviewTemplate->delete();
-
-        return response()->json([
-            'message' => 'Review template deleted successfully'
-        ]);
     }
 
     /**
-     * Get template criteria
+     * Show specific review template
      */
-    public function criteria(ReviewTemplate $reviewTemplate)
+    public function show($id): JsonResponse
     {
-        $criteria = $reviewTemplate->reviewCriteria()
-            ->orderBy('order', 'asc')
-            ->get();
+        try {
+            $template = ReviewTemplate::with(['reviewCriteria'])
+                                    ->findOrFail($id);
 
-        return response()->json([
-            'data' => $criteria
-        ]);
+            return response()->json([
+                'success' => true,
+                'data' => $template
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Review template not found',
+                'error' => $e->getMessage()
+            ], 404);
+        }
+    }
+
+    /**
+     * Create new review template
+     */
+    public function store(Request $request): JsonResponse
+    {
+        try {
+            $validatedData = $request->validate([
+                'name' => 'required|string|max:255',
+                'description' => 'nullable|string',
+                'is_active' => 'boolean',
+                'template_data' => 'nullable|json'
+            ]);
+
+            $template = ReviewTemplate::create($validatedData);
+
+            return response()->json([
+                'success' => true,
+                'data' => $template,
+                'message' => 'Review template created successfully'
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create review template',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Update review template
+     */
+    public function update(Request $request, $id): JsonResponse
+    {
+        try {
+            $template = ReviewTemplate::findOrFail($id);
+
+            $validatedData = $request->validate([
+                'name' => 'sometimes|required|string|max:255',
+                'description' => 'nullable|string',
+                'is_active' => 'boolean',
+                'template_data' => 'nullable|json'
+            ]);
+
+            $template->update($validatedData);
+
+            return response()->json([
+                'success' => true,
+                'data' => $template,
+                'message' => 'Review template updated successfully'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update review template',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete review template
+     */
+    public function destroy($id): JsonResponse
+    {
+        try {
+            $template = ReviewTemplate::findOrFail($id);
+            
+            // Check if template is being used in any reviews
+            if ($template->reviews()->exists()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cannot delete template that is being used in reviews'
+                ], 400);
+            }
+
+            $template->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Review template deleted successfully'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete review template',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get criteria for a specific template
+     */
+    public function getCriteria($id): JsonResponse
+    {
+        try {
+            $template = ReviewTemplate::findOrFail($id);
+            $criteria = $template->reviewCriteria()
+                                ->orderBy('order')
+                                ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $criteria
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve template criteria',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 }
