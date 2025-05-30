@@ -1,6 +1,11 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { ThemeProvider } from '@mui/material/styles';
+import { CssBaseline } from '@mui/material';
+
 import { AuthProvider } from './context/AuthContext';
+import theme from './styles/theme';
+import { ROUTES, USER_ROLES } from './utils/constants';
 
 // Components
 import ProtectedRoute from './components/Auth/ProtectedRoute';
@@ -10,17 +15,23 @@ import Login from './pages/Auth/Login';
 import Register from './pages/Auth/Register';
 import AdminDashboard from './pages/Admin/AdminDashboard';
 
-// Regular Dashboard for non-admin users
-const Dashboard = () => {
+// Simple Dashboard for non-admin users
+const SimpleDashboard = () => {
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  
+  const handleLogout = async () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    window.location.href = '/login';
+  };
+
   return (
     <div style={{ padding: '2rem', textAlign: 'center' }}>
       <h1>Welcome to Employee Management System</h1>
-      <p>You are successfully logged in!</p>
+      <p>You are successfully logged in as {user?.role}!</p>
+      <p>Welcome, {user?.name}</p>
       <button 
-        onClick={() => {
-          localStorage.removeItem('token');
-          window.location.href = '/login';
-        }}
+        onClick={handleLogout}
         style={{
           padding: '0.5rem 1rem',
           backgroundColor: '#ef4444',
@@ -40,36 +51,40 @@ const Dashboard = () => {
 const DashboardRouter = () => {
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   
-  if (user.role === 'admin') {
+  if (user.role === USER_ROLES.ADMIN) {
     return <AdminDashboard />;
   }
   
-  return <Dashboard />;
+  return <SimpleDashboard />;
 };
 
 function App() {
   return (
-    <AuthProvider>
-      <Router>
-        <div className="App">
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <AuthProvider>
+        <Router>
           <Routes>
             {/* Public Routes */}
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
+            <Route path={ROUTES.LOGIN} element={<Login />} />
+            <Route path={ROUTES.REGISTER} element={<Register />} />
             
             {/* Protected Routes */}
-            <Route path="/" element={
-              <ProtectedRoute>
-                <DashboardRouter />
-              </ProtectedRoute>
-            } />
+            <Route
+              path={ROUTES.DASHBOARD}
+              element={
+                <ProtectedRoute>
+                  <DashboardRouter />
+                </ProtectedRoute>
+              }
+            />
             
-            {/* Redirect any unknown routes to login */}
-            <Route path="*" element={<Navigate to="/login" replace />} />
+            {/* Redirect unknown routes */}
+            <Route path="*" element={<Navigate to={ROUTES.LOGIN} replace />} />
           </Routes>
-        </div>
-      </Router>
-    </AuthProvider>
+        </Router>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 
