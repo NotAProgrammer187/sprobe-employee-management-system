@@ -14,9 +14,11 @@ import ProtectedRoute from './components/Auth/ProtectedRoute';
 import Login from './pages/Auth/Login';
 import Register from './pages/Auth/Register';
 import AdminDashboard from './pages/Admin/AdminDashboard';
+import PerformanceMain from './pages/Performance/PerformanceMain';
+import ManagerDashboard from './pages/Performance/ManagerDashboard';
 
-// Simple Dashboard for non-admin users
-const SimpleDashboard = () => {
+// Employee Dashboard for regular employees
+const EmployeeDashboard = () => {
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   
   const handleLogout = async () => {
@@ -30,6 +32,19 @@ const SimpleDashboard = () => {
       <h1>Welcome to Employee Management System</h1>
       <p>You are successfully logged in as {user?.role}!</p>
       <p>Welcome, {user?.name}</p>
+      
+      {/* Employee-specific information */}
+      <div style={{ marginTop: '2rem', textAlign: 'left', maxWidth: '500px', margin: '2rem auto' }}>
+        <h3>Employee Dashboard</h3>
+        <p>As an employee, you can:</p>
+        <ul>
+          <li>View your performance reviews</li>
+          <li>Update your profile information</li>
+          <li>View company announcements</li>
+          <li>Access employee resources</li>
+        </ul>
+      </div>
+      
       <button 
         onClick={handleLogout}
         style={{
@@ -38,7 +53,8 @@ const SimpleDashboard = () => {
           color: 'white',
           border: 'none',
           borderRadius: '4px',
-          cursor: 'pointer'
+          cursor: 'pointer',
+          marginTop: '1rem'
         }}
       >
         Logout
@@ -51,11 +67,17 @@ const SimpleDashboard = () => {
 const DashboardRouter = () => {
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   
-  if (user.role === USER_ROLES.ADMIN) {
-    return <AdminDashboard />;
+  switch (user.role) {
+    case USER_ROLES.ADMIN:
+      return <AdminDashboard />;
+    case USER_ROLES.MANAGER:
+      return <ManagerDashboard />;
+    case USER_ROLES.EMPLOYEE:
+      return <EmployeeDashboard />;
+    default:
+      // Fallback for unknown roles
+      return <EmployeeDashboard />;
   }
-  
-  return <SimpleDashboard />;
 };
 
 function App() {
@@ -75,6 +97,16 @@ function App() {
               element={
                 <ProtectedRoute>
                   <DashboardRouter />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Performance Management Routes - For Admins and Managers */}
+            <Route
+              path="/performance/*"
+              element={
+                <ProtectedRoute allowedRoles={[USER_ROLES.ADMIN, USER_ROLES.MANAGER]}>
+                  <PerformanceMain />
                 </ProtectedRoute>
               }
             />
