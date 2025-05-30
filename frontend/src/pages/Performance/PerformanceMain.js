@@ -18,10 +18,10 @@ import {
 } from '@mui/icons-material';
 
 // Import your page components
-import ReviewFormContainer from '../../components/Performance/ReviewForm/ReviewFormContainer';
 import ReviewsList from './ReviewList';
 import ReviewTemplates from './ReviewTemplates';
 import PerformanceDashboard from './PerformanceDashboard';
+import SimpleReviewForm from './SimpleReviewForm';
 
 const PerformanceMain = () => {
   const navigate = useNavigate();
@@ -164,10 +164,9 @@ const PerformanceMain = () => {
         <Route path="/" element={<PerformanceDashboard />} />
         
         {/* Reviews */}
-        <Route path="/reviews" element={<ReviewsList />} />
-        <Route path="/reviews/new" element={<ReviewFormContainer />} />
-        <Route path="/reviews/:id/edit" element={<ReviewFormContainer />} />
-        <Route path="/reviews/:id" element={<ReviewFormContainer readOnly />} />
+        <Route path="/reviews/new" element={<SimpleReviewForm />} />
+        <Route path="/reviews/:id/edit" element={<SimpleReviewForm />} />
+        <Route path="/reviews/:id" element={<SimpleReviewForm />} />
         
         {/* Templates */}
         <Route path="/templates" element={<ReviewTemplates />} />
