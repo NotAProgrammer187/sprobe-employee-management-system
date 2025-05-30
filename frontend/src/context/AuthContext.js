@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import { authService } from '../services/authService';
 
-// Initial state
+// Initial state - Load user from localStorage if available
 const initialState = {
-  user: null,
+  user: JSON.parse(localStorage.getItem('user') || 'null'),
   token: localStorage.getItem('token'),
   isAuthenticated: false,
   loading: true,
@@ -38,7 +38,9 @@ const authReducer = (state, action) => {
     
     case AUTH_ACTIONS.LOGIN_SUCCESS:
     case AUTH_ACTIONS.REGISTER_SUCCESS:
+      // Store both token and user in localStorage
       localStorage.setItem('token', action.payload.token);
+      localStorage.setItem('user', JSON.stringify(action.payload.user));
       return {
         ...state,
         user: action.payload.user,
@@ -50,7 +52,9 @@ const authReducer = (state, action) => {
     
     case AUTH_ACTIONS.LOGIN_FAILURE:
     case AUTH_ACTIONS.REGISTER_FAILURE:
+      // Clear both token and user from localStorage
       localStorage.removeItem('token');
+      localStorage.removeItem('user');
       return {
         ...state,
         user: null,
@@ -61,7 +65,9 @@ const authReducer = (state, action) => {
       };
     
     case AUTH_ACTIONS.LOGOUT:
+      // Clear both token and user from localStorage
       localStorage.removeItem('token');
+      localStorage.removeItem('user');
       return {
         ...state,
         user: null,
@@ -72,6 +78,8 @@ const authReducer = (state, action) => {
       };
     
     case AUTH_ACTIONS.LOAD_USER_SUCCESS:
+      // Store user in localStorage
+      localStorage.setItem('user', JSON.stringify(action.payload));
       return {
         ...state,
         user: action.payload,
@@ -81,7 +89,9 @@ const authReducer = (state, action) => {
       };
     
     case AUTH_ACTIONS.LOAD_USER_FAILURE:
+      // Clear both token and user from localStorage
       localStorage.removeItem('token');
+      localStorage.removeItem('user');
       return {
         ...state,
         user: null,
@@ -117,9 +127,15 @@ export const AuthProvider = ({ children }) => {
 
   // Load user on mount if token exists
   useEffect(() => {
-    if (state.token) {
+    if (state.token && !state.user) {
+      // Token exists but no user data, load from API
       loadUser();
+    } else if (state.user && state.token) {
+      // Both token and user exist, set as authenticated
+      dispatch({ type: AUTH_ACTIONS.SET_LOADING, payload: false });
+      dispatch({ type: AUTH_ACTIONS.LOAD_USER_SUCCESS, payload: state.user });
     } else {
+      // No token or user, not authenticated
       dispatch({ type: AUTH_ACTIONS.SET_LOADING, payload: false });
     }
   }, []);
