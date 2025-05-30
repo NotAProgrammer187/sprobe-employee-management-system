@@ -1,9 +1,36 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import { authService } from '../services/authService';
 
+// Safe function to parse user data from localStorage
+const safeParseUser = () => {
+  try {
+    const userData = localStorage.getItem('user');
+    
+    // Check if userData exists and is not 'undefined' or 'null' string
+    if (!userData || userData === 'undefined' || userData === 'null') {
+      return null;
+    }
+    
+    const parsed = JSON.parse(userData);
+    
+    // Validate that the parsed data has the expected structure
+    if (!parsed || typeof parsed !== 'object') {
+      return null;
+    }
+    
+    return parsed;
+  } catch (error) {
+    console.error('Error parsing user data from localStorage:', error);
+    // Clear invalid data
+    localStorage.removeItem('user');
+    localStorage.removeItem('token');
+    return null;
+  }
+};
+
 // Initial state - Load user from localStorage if available
 const initialState = {
-  user: JSON.parse(localStorage.getItem('user') || 'null'),
+  user: safeParseUser(), // Use safe parsing function
   token: localStorage.getItem('token'),
   isAuthenticated: false,
   loading: true,
@@ -38,9 +65,13 @@ const authReducer = (state, action) => {
     
     case AUTH_ACTIONS.LOGIN_SUCCESS:
     case AUTH_ACTIONS.REGISTER_SUCCESS:
-      // Store both token and user in localStorage
-      localStorage.setItem('token', action.payload.token);
-      localStorage.setItem('user', JSON.stringify(action.payload.user));
+      // Store both token and user in localStorage safely
+      try {
+        localStorage.setItem('token', action.payload.token);
+        localStorage.setItem('user', JSON.stringify(action.payload.user));
+      } catch (error) {
+        console.error('Error storing auth data:', error);
+      }
       return {
         ...state,
         user: action.payload.user,
@@ -78,8 +109,12 @@ const authReducer = (state, action) => {
       };
     
     case AUTH_ACTIONS.LOAD_USER_SUCCESS:
-      // Store user in localStorage
-      localStorage.setItem('user', JSON.stringify(action.payload));
+      // Store user in localStorage safely
+      try {
+        localStorage.setItem('user', JSON.stringify(action.payload));
+      } catch (error) {
+        console.error('Error storing user data:', error);
+      }
       return {
         ...state,
         user: action.payload,
@@ -145,6 +180,12 @@ export const AuthProvider = ({ children }) => {
     dispatch({ type: AUTH_ACTIONS.LOGIN_START });
     try {
       const response = await authService.login(credentials);
+      
+      // Check if response has the expected structure
+      if (!response || !response.user || !response.token) {
+        throw new Error('Invalid response structure from login service');
+      }
+      
       dispatch({
         type: AUTH_ACTIONS.LOGIN_SUCCESS,
         payload: {
@@ -154,7 +195,7 @@ export const AuthProvider = ({ children }) => {
       });
       return { success: true };
     } catch (error) {
-      const errorMessage = error.response?.data?.message || 'Login failed';
+      const errorMessage = error.response?.data?.message || error.message || 'Login failed';
       dispatch({
         type: AUTH_ACTIONS.LOGIN_FAILURE,
         payload: errorMessage,
@@ -168,6 +209,12 @@ export const AuthProvider = ({ children }) => {
     dispatch({ type: AUTH_ACTIONS.REGISTER_START });
     try {
       const response = await authService.register(userData);
+      
+      // Check if response has the expected structure
+      if (!response || !response.user || !response.token) {
+        throw new Error('Invalid response structure from register service');
+      }
+      
       dispatch({
         type: AUTH_ACTIONS.REGISTER_SUCCESS,
         payload: {
@@ -177,7 +224,7 @@ export const AuthProvider = ({ children }) => {
       });
       return { success: true };
     } catch (error) {
-      const errorMessage = error.response?.data?.message || 'Registration failed';
+      const errorMessage = error.response?.data?.message || error.message || 'Registration failed';
       dispatch({
         type: AUTH_ACTIONS.REGISTER_FAILURE,
         payload: errorMessage,
@@ -190,11 +237,17 @@ export const AuthProvider = ({ children }) => {
   const loadUser = async () => {
     try {
       const response = await authService.getUser();
-      dispatch({
-        type: AUTH_ACTIONS.LOAD_USER_SUCCESS,
-        payload: response.user,
-      });
+      
+      if (response && response.user) {
+        dispatch({
+          type: AUTH_ACTIONS.LOAD_USER_SUCCESS,
+          payload: response.user,
+        });
+      } else {
+        throw new Error('Invalid user data received');
+      }
     } catch (error) {
+      console.error('Error loading user:', error);
       dispatch({ type: AUTH_ACTIONS.LOAD_USER_FAILURE });
     }
   };
