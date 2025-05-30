@@ -22,8 +22,8 @@ class UserController extends Controller
         try {
             $stats = [
                 'total_users' => User::count(),
-                'active_users' => User::count(), // Since you don't have is_active column yet
-                'inactive_users' => 0, // Since you don't have is_active column yet
+                'active_users' => User::where('is_active', true)->count(),
+                'inactive_users' => User::where('is_active', false)->count(),
                 'admins' => User::where('role', 'admin')->count(),
                 'managers' => User::where('role', 'manager')->count(),
                 'employees' => User::where('role', 'employee')->count(),
@@ -58,6 +58,11 @@ class UserController extends Controller
                 $query->where('role', $request->role);
             }
 
+            // Filter by status if provided
+            if ($request->has('is_active')) {
+                $query->where('is_active', $request->boolean('is_active'));
+            }
+
             // Search by name or email
             if ($request->has('search')) {
                 $search = $request->search;
@@ -81,6 +86,28 @@ class UserController extends Controller
     }
 
     /**
+     * Show specific user (Admin only)
+     */
+    public function show(Request $request, $id)
+    {
+        if (!$request->user() || !$request->user()->isAdmin()) {
+            return response()->json(['message' => 'Unauthorized'], Response::HTTP_FORBIDDEN);
+        }
+
+        try {
+            $user = User::findOrFail($id);
+            return response()->json([
+                'user' => $user,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'User not found',
+                'error' => $e->getMessage()
+            ], Response::HTTP_NOT_FOUND);
+        }
+    }
+
+    /**
      * Create new user (Admin only)
      */
     public function store(Request $request)
@@ -95,6 +122,7 @@ class UserController extends Controller
                 'email' => 'required|string|email|max:255|unique:users',
                 'password' => 'required|string|min:8',
                 'role' => 'required|in:admin,manager,employee',
+                'is_active' => 'boolean',
             ]);
 
             $user = User::create([
@@ -102,6 +130,7 @@ class UserController extends Controller
                 'email' => $request->email,
                 'password' => Hash::make($request->password),
                 'role' => $request->role,
+                'is_active' => $request->boolean('is_active', true), // Default to true
                 'email_verified_at' => now(),
             ]);
 
@@ -140,12 +169,14 @@ class UserController extends Controller
                 ],
                 'role' => 'required|in:admin,manager,employee',
                 'password' => 'nullable|string|min:8',
+                'is_active' => 'boolean',
             ]);
 
             $updateData = [
                 'name' => $request->name,
                 'email' => $request->email,
                 'role' => $request->role,
+                'is_active' => $request->boolean('is_active', $user->is_active),
             ];
 
             // Update password if provided
@@ -194,6 +225,39 @@ class UserController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'message' => 'Error deleting user',
+                'error' => $e->getMessage()
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /**
+     * Toggle user status (Admin only)
+     */
+    public function toggleStatus(Request $request, $id)
+    {
+        if (!$request->user() || !$request->user()->isAdmin()) {
+            return response()->json(['message' => 'Unauthorized'], Response::HTTP_FORBIDDEN);
+        }
+
+        try {
+            $user = User::findOrFail($id);
+
+            // Prevent admin from deactivating themselves
+            if ($user->id === $request->user()->id) {
+                return response()->json([
+                    'message' => 'You cannot change your own status'
+                ], Response::HTTP_FORBIDDEN);
+            }
+
+            $user->update(['is_active' => !$user->is_active]);
+
+            return response()->json([
+                'message' => 'User status updated successfully',
+                'user' => $user->fresh(),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Error updating user status',
                 'error' => $e->getMessage()
             ], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
