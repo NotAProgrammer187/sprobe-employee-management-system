@@ -2,158 +2,268 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Employee;
+use App\Models\Review;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
-use Illuminate\Validation\Rule;
 
-class EmployeeController extends Controller
+class ReviewController extends Controller
 {
-    /**
-     * Display a listing of employees
-     */
+    // Get all reviews
     public function index(Request $request)
     {
-        $query = Employee::query();
+        try {
+            $query = Review::with(['employee', 'reviewer', 'reviewTemplate']);
 
-        // Filter by department if provided
-        if ($request->has('department')) {
-            $query->where('department', $request->department);
+            // Apply filters if provided
+            if ($request->has('status')) {
+                $query->where('status', $request->status);
+            }
+
+            if ($request->has('employee_id')) {
+                $query->where('employee_id', $request->employee_id);
+            }
+
+            if ($request->has('search')) {
+                $search = $request->search;
+                $query->where(function($q) use ($search) {
+                    $q->where('title', 'like', "%{$search}%")
+                      ->orWhere('description', 'like', "%{$search}%");
+                });
+            }
+
+            // Pagination
+            if ($request->has('per_page')) {
+                $reviews = $query->paginate($request->per_page);
+            } else {
+                $reviews = $query->get();
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => $reviews
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve reviews',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        // Filter by status if provided
-        if ($request->has('status')) {
-            $query->where('status', $request->status);
-        }
-
-        // Search by name or email
-        if ($request->has('search')) {
-            $search = $request->search;
-            $query->where(function($q) use ($search) {
-                $q->where('first_name', 'like', "%{$search}%")
-                  ->orWhere('last_name', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%");
-            });
-        }
-
-        $employees = $query->paginate($request->per_page ?? 15);
-
-        return response()->json($employees);
     }
 
-    /**
-     * Store a newly created employee
-     */
+    // Get upcoming reviews
+    public function upcoming()
+    {
+        try {
+            $reviews = Review::where('status', 'pending')
+                            ->orWhere('status', 'draft')
+                            ->orderBy('review_period_end', 'asc')
+                            ->limit(10)
+                            ->with(['employee', 'reviewer'])
+                            ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $reviews
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve upcoming reviews',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    // Get completed reviews
+    public function completed()
+    {
+        try {
+            $reviews = Review::whereIn('status', ['completed', 'approved'])
+                            ->with(['employee', 'reviewer'])
+                            ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $reviews
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve completed reviews',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    // Get reviews by reviewer
+    public function getByReviewer($reviewerId)
+    {
+        try {
+            $reviews = Review::where('reviewer_id', $reviewerId)
+                            ->with(['employee', 'reviewTemplate'])
+                            ->get();
+
+            return response()->json([
+                'success' => true,
+                'data' => $reviews
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retrieve reviews by reviewer',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    // Show specific review
+    public function show($id)
+    {
+        try {
+            $review = Review::with(['employee', 'reviewer', 'reviewTemplate', 'reviewCriteria'])
+                           ->findOrFail($id);
+
+            return response()->json([
+                'success' => true,
+                'data' => $review
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Review not found',
+                'error' => $e->getMessage()
+            ], 404);
+        }
+    }
+
+    // Create review
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'first_name' => 'required|string|max:255',
-            'last_name' => 'required|string|max:255',
-            'email' => 'required|email|unique:employees',
-            'phone' => 'nullable|string|max:20',
-            'department' => 'required|string|max:100',
-            'position' => 'required|string|max:100',
-            'hire_date' => 'required|date',
-            'salary' => 'required|numeric|min:0',
-            'status' => 'required|in:active,inactive,terminated',
-        ]);
+        try {
+            $validatedData = $request->validate([
+                'employee_id' => 'required|exists:employees,id',
+                'review_template_id' => 'required|exists:review_templates,id',
+                'reviewer_id' => 'nullable|exists:employees,id',
+                'title' => 'required|string|max:255',
+                'description' => 'nullable|string',
+                'review_period_start' => 'nullable|date',
+                'review_period_end' => 'nullable|date',
+                'review_date' => 'required|date',
+                'status' => 'required|in:draft,pending,completed,approved,rejected',
+                'overall_comments' => 'nullable|string',
+            ]);
 
-        $employee = Employee::create($validated);
+            $review = Review::create($validatedData);
 
-        return response()->json([
-            'message' => 'Employee created successfully',
-            'data' => $employee
-        ], Response::HTTP_CREATED);
-    }
-
-    /**
-     * Display the specified employee
-     */
-    public function show(Employee $employee)
-    {
-        return response()->json([
-            'data' => $employee->load(['reviews.reviewTemplate'])
-        ]);
-    }
-
-    /**
-     * Update the specified employee
-     */
-    public function update(Request $request, Employee $employee)
-    {
-        $validated = $request->validate([
-            'first_name' => 'sometimes|required|string|max:255',
-            'last_name' => 'sometimes|required|string|max:255',
-            'email' => ['sometimes', 'required', 'email', Rule::unique('employees')->ignore($employee->id)],
-            'phone' => 'nullable|string|max:20',
-            'department' => 'sometimes|required|string|max:100',
-            'position' => 'sometimes|required|string|max:100',
-            'hire_date' => 'sometimes|required|date',
-            'salary' => 'sometimes|required|numeric|min:0',
-            'status' => 'sometimes|required|in:active,inactive,terminated',
-        ]);
-
-        $employee->update($validated);
-
-        return response()->json([
-            'message' => 'Employee updated successfully',
-            'data' => $employee
-        ]);
-    }
-
-    /**
-     * Remove the specified employee
-     */
-    public function destroy(Employee $employee)
-    {
-        // Check if employee has reviews
-        if ($employee->reviews()->count() > 0) {
             return response()->json([
-                'message' => 'Cannot delete employee with existing reviews. Please delete reviews first or set employee status to inactive.'
-            ], Response::HTTP_CONFLICT);
+                'success' => true,
+                'data' => $review,
+                'message' => 'Review created successfully'
+            ], 201);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create review',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        $employee->delete();
-
-        return response()->json([
-            'message' => 'Employee deleted successfully'
-        ]);
     }
 
-    /**
-     * Get employee's reviews
-     */
-    public function reviews(Employee $employee)
+    // Update review
+    public function update(Request $request, $id)
     {
-        $reviews = $employee->reviews()
-            ->with(['reviewTemplate', 'reviewCriteria'])
-            ->orderBy('created_at', 'desc')
-            ->get();
+        try {
+            $review = Review::findOrFail($id);
 
-        return response()->json([
-            'data' => $reviews
-        ]);
+            $validatedData = $request->validate([
+                'employee_id' => 'sometimes|required|exists:employees,id',
+                'review_template_id' => 'sometimes|required|exists:review_templates,id',
+                'reviewer_id' => 'nullable|exists:employees,id',
+                'title' => 'sometimes|required|string|max:255',
+                'description' => 'nullable|string',
+                'review_period_start' => 'nullable|date',
+                'review_period_end' => 'nullable|date',
+                'review_date' => 'sometimes|required|date',
+                'status' => 'sometimes|required|in:draft,pending,completed,approved,rejected',
+                'overall_score' => 'nullable|numeric|min:0|max:5',
+                'overall_comments' => 'nullable|string',
+            ]);
+
+            $review->update($validatedData);
+
+            return response()->json([
+                'success' => true,
+                'data' => $review,
+                'message' => 'Review updated successfully'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update review',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
-    /**
-     * Search employees
-     */
-    public function search(Request $request)
+    // Delete review
+    public function destroy($id)
     {
-        $request->validate([
-            'q' => 'required|string|min:2',
-        ]);
+        try {
+            $review = Review::findOrFail($id);
+            $review->delete();
 
-        $employees = Employee::where('first_name', 'like', "%{$request->q}%")
-            ->orWhere('last_name', 'like', "%{$request->q}%")
-            ->orWhere('email', 'like', "%{$request->q}%")
-            ->orWhere('department', 'like', "%{$request->q}%")
-            ->orWhere('position', 'like', "%{$request->q}%")
-            ->limit(10)
-            ->get();
+            return response()->json([
+                'success' => true,
+                'message' => 'Review deleted successfully'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete review',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 
-        return response()->json([
-            'data' => $employees
-        ]);
+    // Submit review
+    public function submit(Request $request, $id)
+    {
+        try {
+            $review = Review::findOrFail($id);
+            $review->update(['status' => 'completed']);
+
+            return response()->json([
+                'success' => true,
+                'data' => $review,
+                'message' => 'Review submitted successfully'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to submit review',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    // Approve review
+    public function approve($id)
+    {
+        try {
+            $review = Review::findOrFail($id);
+            $review->update(['status' => 'approved']);
+
+            return response()->json([
+                'success' => true,
+                'data' => $review,
+                'message' => 'Review approved successfully'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to approve review',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 }
