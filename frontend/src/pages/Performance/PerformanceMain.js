@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
@@ -30,7 +30,7 @@ const PerformanceMain = () => {
   // Determine current tab based on path
   const getCurrentTab = () => {
     const path = location.pathname;
-    if (path.includes('/reviews/new') || path.includes('/reviews/') && path.includes('/edit')) {
+    if (path.includes('/reviews/new') || (path.includes('/reviews/') && path.includes('/edit'))) {
       return 1; // Reviews tab when creating/editing
     } else if (path.includes('/reviews')) {
       return 1; // Reviews tab
@@ -43,6 +43,11 @@ const PerformanceMain = () => {
   };
 
   const [currentTab, setCurrentTab] = useState(getCurrentTab());
+
+  // Update tab when location changes
+  useEffect(() => {
+    setCurrentTab(getCurrentTab());
+  }, [location.pathname]);
 
   const handleTabChange = (event, newValue) => {
     setCurrentTab(newValue);
@@ -114,10 +119,9 @@ const PerformanceMain = () => {
     );
   };
 
-  // Don't show tabs when creating/editing reviews
+  // Don't show tabs when creating/editing reviews - fix the logic
   const showTabs = !location.pathname.includes('/reviews/new') && 
-                   !location.pathname.includes('/reviews/') ||
-                   !location.pathname.includes('/edit');
+                   !(location.pathname.includes('/reviews/') && location.pathname.includes('/edit'));
 
   return (
     <Container maxWidth="xl" sx={{ py: 3 }}>

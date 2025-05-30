@@ -1,143 +1,57 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Box,
-  Paper,
+  Container,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  TablePagination,
+  Paper,
   Chip,
-  Button,
+  Avatar,
   Typography,
-  TextField,
-  InputAdornment,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   IconButton,
-  Tooltip,
+  Menu,
+  MenuItem,
   Alert,
-  CircularProgress,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Grid,
-  Card,
-  CardContent
+  CircularProgress
 } from '@mui/material';
 import {
-  Add as AddIcon,
-  Search as SearchIcon,
+  MoreVert as MoreVertIcon,
   Edit as EditIcon,
   Visibility as ViewIcon,
   Delete as DeleteIcon,
-  FileDownload as ExportIcon,
-  FilterList as FilterIcon
+  Star as StarIcon
 } from '@mui/icons-material';
-
-import { reviewService, employeeService } from '../../services';
-
-const REVIEW_STATUS_COLORS = {
-  draft: 'default',
-  pending: 'warning',
-  completed: 'info',
-  approved: 'success',
-  rejected: 'error'
-};
-
-const REVIEW_STATUS_LABELS = {
-  draft: 'Draft',
-  pending: 'Pending Review',
-  completed: 'Completed',
-  approved: 'Approved',
-  rejected: 'Rejected'
-};
+import { useNavigate } from 'react-router-dom';
+import PerformanceReviewsHeader from '../../components/Performance/PerformanceReviewsHeader';
+import { reviewService } from '../../services';
 
 const ReviewsList = () => {
   const navigate = useNavigate();
   
-  // State
+  // State management
   const [reviews, setReviews] = useState([]);
-  const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  
-  // Pagination
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
-  
-  // Filtering
-  const [filters, setFilters] = useState({
-    search: '',
-    status: '',
-    employee_id: ''
-  });
-  
-  // Delete dialog
-  const [deleteDialog, setDeleteDialog] = useState({
-    open: false,
-    reviewId: null,
-    reviewTitle: ''
-  });
+  const [searchTerm, setSearchTerm] = useState('');
+  const [activeFilters, setActiveFilters] = useState([]);
+  const [actionMenuAnchor, setActionMenuAnchor] = useState(null);
+  const [selectedReview, setSelectedReview] = useState(null);
 
-  // Stats
-  const [stats, setStats] = useState({
-    total: 0,
-    draft: 0,
-    pending: 0,
-    completed: 0,
-    approved: 0
-  });
-
-  // Load data
+  // Load reviews on component mount
   useEffect(() => {
-    loadData();
-  }, [page, rowsPerPage, filters]);
+    loadReviews();
+  }, []);
 
-  const loadData = async () => {
+  const loadReviews = async () => {
     try {
       setLoading(true);
       setError('');
-      
-      // Build query parameters
-      const params = {
-        page: page + 1,
-        per_page: rowsPerPage,
-        ...filters
-      };
-      
-      // Remove empty filters
-      Object.keys(params).forEach(key => {
-        if (params[key] === '' || params[key] === null) {
-          delete params[key];
-        }
-      });
-
-      const [reviewsData, employeesData] = await Promise.all([
-        reviewService.retrieveReviews(params),
-        employeeService.retrieveActiveEmployees()
-      ]);
-      
-      setReviews(reviewsData.data || reviewsData);
-      setEmployees(employeesData);
-      
-      // Calculate stats
-      const allReviews = await reviewService.retrieveReviews();
-      const reviewStats = {
-        total: allReviews.length,
-        draft: allReviews.filter(r => r.status === 'draft').length,
-        pending: allReviews.filter(r => r.status === 'pending').length,
-        completed: allReviews.filter(r => r.status === 'completed').length,
-        approved: allReviews.filter(r => r.status === 'approved').length
-      };
-      setStats(reviewStats);
-      
+      const reviewsData = await reviewService.retrieveReviews();
+      setReviews(reviewsData || []);
     } catch (err) {
       setError('Failed to load reviews');
       console.error('Error loading reviews:', err);
@@ -146,371 +60,323 @@ const ReviewsList = () => {
     }
   };
 
-  // Filter handlers
-  const handleFilterChange = (field, value) => {
-    setFilters(prev => ({ ...prev, [field]: value }));
-    setPage(0); // Reset to first page when filtering
-  };
+  // Filter and search logic
+  const filteredReviews = useMemo(() => {
+    let filtered = [...reviews];
 
-  const clearFilters = () => {
-    setFilters({
-      search: '',
-      status: '',
-      employee_id: ''
-    });
-    setPage(0);
-  };
-
-  // Pagination handlers
-  const handleChangePage = (event, newPage) => {
-    setPage(newPage);
-  };
-
-  const handleChangeRowsPerPage = (event) => {
-    setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
-  };
-
-  // Action handlers
-  const handleView = (reviewId) => {
-    navigate(`/performance/reviews/${reviewId}`);
-  };
-
-  const handleEdit = (reviewId) => {
-    navigate(`/performance/reviews/${reviewId}/edit`);
-  };
-
-  const handleDelete = async () => {
-    try {
-      setLoading(true);
-      await reviewService.deleteReview(deleteDialog.reviewId);
-      setDeleteDialog({ open: false, reviewId: null, reviewTitle: '' });
-      await loadData(); // Refresh data
-    } catch (err) {
-      setError('Failed to delete review');
-      console.error('Error deleting review:', err);
-    } finally {
-      setLoading(false);
+    // Apply search filter
+    if (searchTerm) {
+      const search = searchTerm.toLowerCase();
+      filtered = filtered.filter(review => 
+        review.title?.toLowerCase().includes(search) ||
+        review.employee_name?.toLowerCase().includes(search) ||
+        review.status?.toLowerCase().includes(search)
+      );
     }
+
+    // Apply status filters
+    if (activeFilters.length > 0) {
+      filtered = filtered.filter(review => 
+        activeFilters.includes(review.status)
+      );
+    }
+
+    return filtered;
+  }, [reviews, searchTerm, activeFilters]);
+
+  // Handle filter changes
+  const handleFilterChange = (filterValue) => {
+    setActiveFilters(prev => 
+      prev.includes(filterValue)
+        ? prev.filter(f => f !== filterValue)
+        : [...prev, filterValue]
+    );
   };
 
-  const handleCreateNew = () => {
-    navigate('/performance/reviews/new');
+  const handleClearFilters = () => {
+    setActiveFilters([]);
+    setSearchTerm('');
   };
 
-  // Get employee name
-  const getEmployeeName = (employeeId) => {
-    const employee = employees.find(emp => emp.id === employeeId);
-    return employee ? `${employee.first_name} ${employee.last_name}` : 'Unknown';
+  // Action menu handlers
+  const handleActionClick = (event, review) => {
+    setActionMenuAnchor(event.currentTarget);
+    setSelectedReview(review);
   };
 
-  // Format date
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString();
+  const handleActionClose = () => {
+    setActionMenuAnchor(null);
+    setSelectedReview(null);
   };
 
-  if (loading && reviews.length === 0) {
+  const handleEditReview = () => {
+    if (selectedReview) {
+      navigate(`/performance/reviews/${selectedReview.id}/edit`);
+    }
+    handleActionClose();
+  };
+
+  const handleViewReview = () => {
+    if (selectedReview) {
+      navigate(`/performance/reviews/${selectedReview.id}`);
+    }
+    handleActionClose();
+  };
+
+  const handleDeleteReview = async () => {
+    if (selectedReview) {
+      try {
+        await reviewService.deleteReview(selectedReview.id);
+        await loadReviews(); // Refresh the list
+      } catch (err) {
+        setError('Failed to delete review');
+        console.error('Error deleting review:', err);
+      }
+    }
+    handleActionClose();
+  };
+
+  // Status configuration
+  const getStatusConfig = (status) => {
+    const configs = {
+      draft: { color: 'default', label: 'Draft' },
+      pending: { color: 'warning', label: 'Pending' },
+      completed: { color: 'info', label: 'Completed' },
+      approved: { color: 'success', label: 'Approved' },
+      rejected: { color: 'error', label: 'Rejected' }
+    };
+    return configs[status] || configs.draft;
+  };
+
+  // Employee initials helper
+  const getEmployeeInitials = (name) => {
+    if (!name) return '??';
+    const parts = name.split(' ');
+    return parts.length >= 2 
+      ? `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
+      : name.substring(0, 2).toUpperCase();
+  };
+
+  // Score display helper
+  const renderScore = (score) => {
+    // Convert to number and validate
+    const numericScore = parseFloat(score);
+    
+    // Return dash if score is invalid, null, undefined, or 0
+    if (!score || isNaN(numericScore) || numericScore === 0) {
+      return (
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          -
+        </Typography>
+      );
+    }
+    
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-        <CircularProgress />
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        <StarIcon sx={{ fontSize: '1rem', color: 'warning.main' }} />
+        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+          {numericScore.toFixed(1)}
+        </Typography>
       </Box>
+    );
+  };
+
+  if (loading) {
+    return (
+      <Container maxWidth="xl" sx={{ py: 4 }}>
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+          <CircularProgress size={60} />
+        </Box>
+      </Container>
     );
   }
 
   return (
-    <Box>
-      {/* Error Alert */}
+    <Container maxWidth="xl" sx={{ py: 4 }}>
+      {/* Header with Search and Filters */}
+      <PerformanceReviewsHeader
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+        activeFilters={activeFilters}
+        onFilterChange={handleFilterChange}
+        onClearFilters={handleClearFilters}
+        totalReviews={reviews.length}
+        filteredCount={filteredReviews.length}
+      />
+
+      {/* Error Message */}
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>
+        <Alert severity="error" sx={{ mb: 3, borderRadius: '8px' }}>
           {error}
         </Alert>
       )}
 
-      {/* Stats Cards */}
-      <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6} md={2.4}>
-          <Card>
-            <CardContent sx={{ textAlign: 'center', py: 2 }}>
-              <Typography variant="h4" color="primary">
-                {stats.total}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Total Reviews
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={2.4}>
-          <Card>
-            <CardContent sx={{ textAlign: 'center', py: 2 }}>
-              <Typography variant="h4" color="grey.600">
-                {stats.draft}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Draft
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={2.4}>
-          <Card>
-            <CardContent sx={{ textAlign: 'center', py: 2 }}>
-              <Typography variant="h4" color="warning.main">
-                {stats.pending}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Pending
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={2.4}>
-          <Card>
-            <CardContent sx={{ textAlign: 'center', py: 2 }}>
-              <Typography variant="h4" color="info.main">
-                {stats.completed}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Completed
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={2.4}>
-          <Card>
-            <CardContent sx={{ textAlign: 'center', py: 2 }}>
-              <Typography variant="h4" color="success.main">
-                {stats.approved}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Approved
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-
-      {/* Header and Actions */}
-      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Typography variant="h5" component="h2">
-          Performance Reviews
-        </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={handleCreateNew}
-        >
-          New Review
-        </Button>
-      </Box>
-
-      {/* Filters */}
-      <Paper sx={{ p: 2, mb: 3 }}>
-        <Grid container spacing={2} alignItems="center">
-          <Grid item xs={12} md={4}>
-            <TextField
-              fullWidth
-              placeholder="Search reviews..."
-              value={filters.search}
-              onChange={(e) => handleFilterChange('search', e.target.value)}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon />
-                  </InputAdornment>
-                ),
-              }}
-            />
-          </Grid>
-          <Grid item xs={12} md={3}>
-            <FormControl fullWidth>
-              <InputLabel>Status</InputLabel>
-              <Select
-                value={filters.status}
-                label="Status"
-                onChange={(e) => handleFilterChange('status', e.target.value)}
-              >
-                <MenuItem value="">All Statuses</MenuItem>
-                <MenuItem value="draft">Draft</MenuItem>
-                <MenuItem value="pending">Pending</MenuItem>
-                <MenuItem value="completed">Completed</MenuItem>
-                <MenuItem value="approved">Approved</MenuItem>
-                <MenuItem value="rejected">Rejected</MenuItem>
-              </Select>
-            </FormControl>
-          </Grid>
-          <Grid item xs={12} md={3}>
-            <FormControl fullWidth>
-              <InputLabel>Employee</InputLabel>
-              <Select
-                value={filters.employee_id}
-                label="Employee"
-                onChange={(e) => handleFilterChange('employee_id', e.target.value)}
-              >
-                <MenuItem value="">All Employees</MenuItem>
-                {employees.map((employee) => (
-                  <MenuItem key={employee.id} value={employee.id}>
-                    {employee.first_name} {employee.last_name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Grid>
-          <Grid item xs={12} md={2}>
-            <Button
-              fullWidth
-              variant="outlined"
-              onClick={clearFilters}
-              startIcon={<FilterIcon />}
-            >
-              Clear Filters
-            </Button>
-          </Grid>
-        </Grid>
-      </Paper>
-
       {/* Reviews Table */}
-      <Paper>
+      <Paper 
+        elevation={0}
+        sx={{ 
+          border: '1px solid',
+          borderColor: 'grey.200',
+          borderRadius: '8px',
+          overflow: 'hidden'
+        }}
+      >
         <TableContainer>
           <Table>
-            <TableHead>
+            <TableHead sx={{ bgcolor: 'grey.50' }}>
               <TableRow>
-                <TableCell>Title</TableCell>
-                <TableCell>Employee</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Review Period</TableCell>
-                <TableCell>Overall Score</TableCell>
-                <TableCell>Created Date</TableCell>
-                <TableCell align="center">Actions</TableCell>
+                <TableCell sx={{ fontWeight: 600, py: 2 }}>Employee</TableCell>
+                <TableCell sx={{ fontWeight: 600, py: 2 }}>Review Title</TableCell>
+                <TableCell sx={{ fontWeight: 600, py: 2 }}>Status</TableCell>
+                <TableCell sx={{ fontWeight: 600, py: 2 }}>Score</TableCell>
+                <TableCell sx={{ fontWeight: 600, py: 2 }}>Review Date</TableCell>
+                <TableCell sx={{ fontWeight: 600, py: 2 }}>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {reviews.map((review) => (
-                <TableRow key={review.id} hover>
-                  <TableCell>
-                    <Typography variant="subtitle2">
-                      {review.title}
+              {filteredReviews.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} sx={{ textAlign: 'center', py: 4 }}>
+                    <Typography variant="body1" sx={{ color: 'text.secondary' }}>
+                      {searchTerm || activeFilters.length > 0 
+                        ? 'No reviews match your search criteria'
+                        : 'No performance reviews found'
+                      }
                     </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {review.description}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    {getEmployeeName(review.employee_id)}
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      label={REVIEW_STATUS_LABELS[review.status]}
-                      color={REVIEW_STATUS_COLORS[review.status]}
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    {review.review_period_start && review.review_period_end ? (
-                      <>
-                        {formatDate(review.review_period_start)} - {formatDate(review.review_period_end)}
-                      </>
-                    ) : (
-                      'Not specified'
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {review.overall_score ? (
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography variant="h6" color="primary">
-                          {review.overall_score}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          / 5.0
-                        </Typography>
-                      </Box>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary">
-                        Not scored
-                      </Typography>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {formatDate(review.created_at)}
-                  </TableCell>
-                  <TableCell align="center">
-                    <Tooltip title="View">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleView(review.id)}
-                      >
-                        <ViewIcon />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Edit">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleEdit(review.id)}
-                        disabled={review.status === 'approved'}
-                      >
-                        <EditIcon />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Delete">
-                      <IconButton
-                        size="small"
-                        onClick={() => setDeleteDialog({
-                          open: true,
-                          reviewId: review.id,
-                          reviewTitle: review.title
-                        })}
-                        disabled={review.status === 'approved'}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </Tooltip>
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                filteredReviews.map((review) => {
+                  const statusConfig = getStatusConfig(review.status);
+                  
+                  return (
+                    <TableRow 
+                      key={review.id}
+                      sx={{ 
+                        '&:hover': { bgcolor: 'grey.50' },
+                        cursor: 'pointer'
+                      }}
+                      onClick={() => navigate(`/performance/reviews/${review.id}`)}
+                    >
+                      <TableCell sx={{ py: 2 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <Avatar 
+                            sx={{ 
+                              width: 40, 
+                              height: 40,
+                              bgcolor: 'primary.main',
+                              fontSize: '0.875rem',
+                              fontWeight: 600
+                            }}
+                          >
+                            {getEmployeeInitials(review.employee_name)}
+                          </Avatar>
+                          <Box>
+                            <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                              {review.employee_name || 'Unknown Employee'}
+                            </Typography>
+                            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                              ID: {review.employee_id}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </TableCell>
+                      
+                      <TableCell sx={{ py: 2 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                          {review.title || 'Untitled Review'}
+                        </Typography>
+                        {review.review_period && (
+                          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                            {review.review_period}
+                          </Typography>
+                        )}
+                      </TableCell>
+                      
+                      <TableCell sx={{ py: 2 }}>
+                        <Chip
+                          label={statusConfig.label}
+                          color={statusConfig.color}
+                          size="small"
+                          variant="outlined"
+                          sx={{ 
+                            borderRadius: '6px',
+                            fontWeight: 500,
+                            fontSize: '0.75rem'
+                          }}
+                        />
+                      </TableCell>
+                      
+                      <TableCell sx={{ py: 2 }}>
+                        {renderScore(review.overall_score)}
+                      </TableCell>
+                      
+                      <TableCell sx={{ py: 2 }}>
+                        <Typography variant="body2">
+                          {review.review_date 
+                            ? new Date(review.review_date).toLocaleDateString()
+                            : '-'
+                          }
+                        </Typography>
+                      </TableCell>
+                      
+                      <TableCell sx={{ py: 2 }}>
+                        <IconButton
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleActionClick(e, review);
+                          }}
+                          sx={{
+                            '&:hover': {
+                              bgcolor: 'primary.50'
+                            }
+                          }}
+                        >
+                          <MoreVertIcon />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
             </TableBody>
           </Table>
         </TableContainer>
-        
-        <TablePagination
-          component="div"
-          count={stats.total}
-          page={page}
-          onPageChange={handleChangePage}
-          rowsPerPage={rowsPerPage}
-          onRowsPerPageChange={handleChangeRowsPerPage}
-          rowsPerPageOptions={[5, 10, 25, 50]}
-        />
       </Paper>
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog
-        open={deleteDialog.open}
-        onClose={() => setDeleteDialog({ open: false, reviewId: null, reviewTitle: '' })}
+      {/* Action Menu */}
+      <Menu
+        anchorEl={actionMenuAnchor}
+        open={Boolean(actionMenuAnchor)}
+        onClose={handleActionClose}
+        PaperProps={{
+          sx: {
+            borderRadius: '8px',
+            border: '1px solid',
+            borderColor: 'grey.200',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+            minWidth: 160
+          }
+        }}
       >
-        <DialogTitle>Confirm Delete</DialogTitle>
-        <DialogContent>
-          <Typography>
-            Are you sure you want to delete the review "{deleteDialog.reviewTitle}"?
-            This action cannot be undone.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button
-            onClick={() => setDeleteDialog({ open: false, reviewId: null, reviewTitle: '' })}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleDelete}
-            color="error"
-            variant="contained"
-            disabled={loading}
-          >
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Box>
+        <MenuItem onClick={handleViewReview}>
+          <ViewIcon sx={{ mr: 1.5, fontSize: '1.25rem' }} />
+          View Review
+        </MenuItem>
+        <MenuItem onClick={handleEditReview}>
+          <EditIcon sx={{ mr: 1.5, fontSize: '1.25rem' }} />
+          Edit Review
+        </MenuItem>
+        <MenuItem 
+          onClick={handleDeleteReview}
+          sx={{ color: 'error.main' }}
+        >
+          <DeleteIcon sx={{ mr: 1.5, fontSize: '1.25rem' }} />
+          Delete Review
+        </MenuItem>
+      </Menu>
+    </Container>
   );
 };
 
