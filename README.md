@@ -28,6 +28,10 @@ A comprehensive full-stack employee management system built with Laravel and Rea
 - **[Axios](https://axios-http.com/)** - Promise-based HTTP client
 - **[Date-fns](https://date-fns.org/)** - Modern JavaScript date utility library
 
+## 🗄️ Database Schema (ERD)
+
+![ERD Diagram](https://github.com/[username]/[reponame]/blob/[branch]/ERDiagram.png?raw=true)
+
 ## 📋 Requirements
 
 - **PHP**: ^8.1
