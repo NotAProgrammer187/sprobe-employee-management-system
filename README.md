@@ -266,34 +266,3 @@ sprobe-employee-management-system/
 │   └── .env                 # Environment variables
 └── README.md               # This file
 ```
-
-## 🔧 Development
-
-### Backend Development
-```bash
-# Run migrations
-php artisan migrate
-
-# Create new migration
-php artisan make:migration create_table_name
-
-# Create new controller
-php artisan make:controller ControllerName
-
-# Clear cache
-php artisan cache:clear
-php artisan config:clear
-php artisan route:clear
-```
-
-### Frontend Development
-```bash
-# Install new package
-npm install package-name
-
-# Build for production
-npm run build
-
-# Run linting
-npm run lint
-```
