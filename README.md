@@ -30,7 +30,7 @@ A comprehensive full-stack employee management system built with Laravel and Rea
 
 ## 🗄️ Database Schema (ERD)
 
-![ERD Diagram](https://github.com/[username]/[reponame]/blob/[branch]/ERDiagram.png?raw=true)
+![ERD Diagram](https://raw.githubusercontent.com/NotAProgrammer187/sprobe-employee-management-system/refs/heads/main/ERDiagram.png)
 
 ## 📋 Requirements
 
