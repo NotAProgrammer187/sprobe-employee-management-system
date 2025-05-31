@@ -82,6 +82,15 @@ DB_PASSWORD=your_password
 php artisan migrate --seed
 ```
 
+### 🔐 Default Users
+After running the seeders, you can log in with these default accounts:
+
+| Role | Email | Password | Access Level |
+|------|-------|----------|-------------|
+| **Admin** | `admin@admin.com` | `admin123` | Full system access |
+| **Manager** | `manager@company.com` | `manager123` | Employee management |
+| **Employee** | `employee@company.com` | `employee123` | Personal dashboard |
+
 #### Start Laravel Development Server
 ```bash
 php artisan serve
