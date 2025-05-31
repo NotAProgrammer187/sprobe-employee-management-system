@@ -139,9 +139,9 @@ const ReviewBasicInfo = ({
                       }
                     }}
                   >
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, paddingRight: '200px' }}>
                       <PersonIcon sx={{ fontSize: '1rem', color: 'text.secondary' }} />
-                      {employee.first_name} {employee.last_name}
+                      {employee.first_name}
                     </Box>
                   </MenuItem>
                 ))}
