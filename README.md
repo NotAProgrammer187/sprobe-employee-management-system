@@ -8,7 +8,7 @@ A comprehensive full-stack employee management system built with Laravel and Rea
 - **Performance Reviews**: Structured review system with templates and criteria
 - **User Authentication**: Secure authentication using Laravel Sanctum
 - **Role-based Access Control**: Admin and employee permissions
-- **Dashboard Analytics**: Real-time statistics and insights
+- **Dashboard Analytics**: Statistics and insights
 - **Review Templates**: Customizable review templates and criteria
 - **Responsive Design**: Modern UI with Material-UI components
 - **RESTful API**: Well-documented API endpoints
