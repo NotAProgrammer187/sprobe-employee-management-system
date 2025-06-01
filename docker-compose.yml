@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  # Database Service
+  mysql:
+    image: mysql:8.0
+    container_name: ems_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: employee_management
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_USER: ems_user
+      MYSQL_PASSWORD: ems_pass
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - ems_network
+
+  # Backend Service (Laravel)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ems_backend
+    restart: unless-stopped
+    working_dir: /var/www
+    volumes:
+      - ./backend:/var/www
+      - ./backend/storage:/var/www/storage
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mysql
+    environment:
+      - DB_CONNECTION=mysql
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_DATABASE=employee_management
+      - DB_USERNAME=ems_user
+      - DB_PASSWORD=ems_pass
+    networks:
+      - ems_network
+
+  # Frontend Service (React)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: ems_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000/api
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    networks:
+      - ems_network
+
+volumes:
+  mysql_data:
+
+networks:
+  ems_network:
+    driver: bridge
