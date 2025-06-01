@@ -40,7 +40,9 @@ fi
 
 # Build and start containers
 echo "🏗️  Building Docker containers..."
-docker-compose up --build -d
+docker-compose down -v 2>/dev/null || true
+docker-compose build --no-cache
+docker-compose up -d
 
 # Wait for MySQL to be ready
 echo "⏳ Waiting for MySQL to be ready..."

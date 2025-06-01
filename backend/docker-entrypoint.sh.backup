@@ -1,0 +1,26 @@
+#!/bin/bash
+set -e
+
+# Ensure we're in the right directory
+cd /var/www
+
+# Check if vendor directory exists and has content
+if [ ! -d "vendor" ] || [ ! -f "vendor/autoload.php" ]; then
+    echo "Installing Composer dependencies..."
+    composer install --no-interaction --prefer-dist --optimize-autoloader || {
+        echo "Composer install failed, trying update..."
+        composer update --no-interaction --prefer-dist --optimize-autoloader
+    }
+fi
+
+# Ensure autoload file exists
+if [ ! -f "vendor/autoload.php" ]; then
+    echo "Regenerating autoload files..."
+    composer dump-autoload --optimize
+fi
+
+# Set proper permissions
+chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache /var/www/vendor 2>/dev/null || true
+
+# Execute the main command
+exec "$@"

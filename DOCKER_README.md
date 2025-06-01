@@ -161,13 +161,24 @@ sleep 60
 docker-compose restart backend
 ```
 
-**3. Permission issues (Linux/Mac):**
+**3. "vendor/autoload.php not found" error:**
+```bash
+# Clean rebuild everything
+docker-compose down -v
+docker-compose build --no-cache
+docker-compose up -d
+
+# Or manually install dependencies
+docker-compose exec backend composer install
+```
+
+**4. Permission issues (Linux/Mac):**
 ```bash
 sudo chown -R $USER:$USER backend/storage
 sudo chmod -R 775 backend/storage
 ```
 
-**4. Clear everything and start fresh:**
+**5. Clear everything and start fresh:**
 ```bash
 docker-compose down -v
 docker-compose build --no-cache
