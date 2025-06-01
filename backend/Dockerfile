@@ -1,4 +1,4 @@
-FROM php:8.1-fpm
+FROM php:8.2-fpm
 
 # Set working directory
 WORKDIR /var/www
@@ -24,14 +24,21 @@ RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd
 # Get latest Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# Copy existing application directory contents
+# Copy composer files first for better caching
+COPY composer.json composer.lock* ./
+
+# Install PHP dependencies (update composer.lock if needed)
+RUN composer install --no-dev --optimize-autoloader --no-scripts --no-autoloader || \
+    composer update --no-dev --optimize-autoloader --no-scripts --no-autoloader
+
+# Copy the rest of the application
 COPY . /var/www
+
+# Generate autoloader
+RUN composer dump-autoload --optimize
 
 # Copy existing application directory permissions
 COPY --chown=www-data:www-data . /var/www
-
-# Install PHP dependencies
-RUN composer install --no-dev --optimize-autoloader
 
 # Set permissions
 RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache

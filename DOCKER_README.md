@@ -5,7 +5,7 @@ This Docker setup provides a simple way for developers to build and run the enti
 ## 📋 What's Included
 
 - **MySQL 8.0** - Database server
-- **PHP 8.1 with Laravel** - Backend API
+- **PHP 8.2 with Laravel** - Backend API
 - **Node.js 18 with React** - Frontend application
 - **Automatic setup scripts** - For easy deployment
 
@@ -219,7 +219,7 @@ docker-compose exec backend php artisan migrate:fresh --seed
 - Accessible on port 3307
 
 ### Backend Container
-- Runs Laravel with PHP 8.1
+- Runs Laravel with PHP 8.2
 - Serves API endpoints on port 8000
 - Handles authentication, business logic
 
