@@ -104,7 +104,11 @@ const Register = () => {
 
             {/* Error Alert */}
             {error && (
-              <Alert severity="error" sx={{ mb: 2 }}>
+              <Alert 
+                severity="error" 
+                sx={{ mb: 2 }}
+                id="register-error-alert"
+              >
                 {error}
               </Alert>
             )}
@@ -115,7 +119,7 @@ const Register = () => {
                 margin="normal"
                 required
                 fullWidth
-                id="name"
+                id="register-name-input"
                 label="Full Name"
                 name="name"
                 autoComplete="name"
@@ -131,7 +135,7 @@ const Register = () => {
                 margin="normal"
                 required
                 fullWidth
-                id="email"
+                id="register-email-input"
                 label="Email Address"
                 name="email"
                 autoComplete="email"
@@ -149,7 +153,7 @@ const Register = () => {
                 name="password"
                 label="Password"
                 type={showPassword ? 'text' : 'password'}
-                id="password"
+                id="register-password-input"
                 autoComplete="new-password"
                 value={values.password}
                 onChange={handleChange}
@@ -164,6 +168,7 @@ const Register = () => {
                         onClick={togglePasswordVisibility}
                         onMouseDown={(e) => e.preventDefault()}
                         edge="end"
+                        id="register-toggle-password-btn"
                       >
                         {showPassword ? <VisibilityOff /> : <Visibility />}
                       </IconButton>
@@ -179,7 +184,7 @@ const Register = () => {
                 name="password_confirmation"
                 label="Confirm Password"
                 type={showConfirmPassword ? 'text' : 'password'}
-                id="password_confirmation"
+                id="register-confirm-password-input"
                 autoComplete="new-password"
                 value={values.password_confirmation}
                 onChange={handleChange}
@@ -194,6 +199,7 @@ const Register = () => {
                         onClick={toggleConfirmPasswordVisibility}
                         onMouseDown={(e) => e.preventDefault()}
                         edge="end"
+                        id="register-toggle-confirm-password-btn"
                       >
                         {showConfirmPassword ? <VisibilityOff /> : <Visibility />}
                       </IconButton>
@@ -208,8 +214,9 @@ const Register = () => {
                 variant="contained"
                 disabled={loading}
                 sx={{ mt: 3, mb: 2, py: 1.5 }}
+                id="register-submit-btn"
               >
-                {loading && <CircularProgress size={20} sx={{ mr: 1 }} />}
+                {loading && <CircularProgress size={20} sx={{ mr: 1 }} id="register-loading-spinner" />}
                 {loading ? 'Creating account...' : 'Create Account'}
               </Button>
 
@@ -221,6 +228,7 @@ const Register = () => {
                     to={ROUTES.LOGIN}
                     variant="text"
                     size="small"
+                    id="register-login-link"
                   >
                     Sign in here
                   </Button>

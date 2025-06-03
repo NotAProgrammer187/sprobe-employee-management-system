@@ -31,22 +31,26 @@ const AdminDashboard = () => {
 
   if (loading) {
     return (
-      <div className="admin-loading">
-        <div className="loading-spinner"></div>
+      <div className="admin-loading" id="admin-loading">
+        <div className="loading-spinner" id="admin-loading-spinner"></div>
         <p>Loading dashboard...</p>
       </div>
     );
   }
 
   return (
-    <div className="admin-dashboard">
+    <div className="admin-dashboard" id="admin-dashboard">
       {/* Header */}
       <header className="admin-header">
         <div className="admin-header-content">
           <h1>Admin Dashboard</h1>
           <div className="admin-header-right">
             <span className="admin-welcome">Welcome, {user?.name}</span>
-            <button onClick={handleLogout} className="logout-btn">
+            <button 
+              onClick={handleLogout} 
+              className="logout-btn"
+              id="admin-logout-btn"
+            >
               Logout
             </button>
           </div>
@@ -58,12 +62,14 @@ const AdminDashboard = () => {
         <button
           className={`nav-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
           onClick={() => setActiveTab('dashboard')}
+          id="admin-dashboard-tab-btn"
         >
           Dashboard
         </button>
         <button
           className={`nav-btn ${activeTab === 'users' ? 'active' : ''}`}
           onClick={() => setActiveTab('users')}
+          id="admin-users-tab-btn"
         >
           User Management
         </button>
@@ -76,8 +82,8 @@ const AdminDashboard = () => {
             <h2>System Overview</h2>
             
             {/* Stats Cards */}
-            <div className="stats-grid">
-              <div className="stat-card">
+            <div className="stats-grid" id="admin-stats-grid">
+              <div className="stat-card" id="admin-stat-total-users">
                 <div className="stat-icon">👥</div>
                 <div className="stat-info">
                   <h3>{stats?.total_users || 0}</h3>
@@ -85,7 +91,7 @@ const AdminDashboard = () => {
                 </div>
               </div>
               
-              <div className="stat-card">
+              <div className="stat-card" id="admin-stat-active-users">
                 <div className="stat-icon">✅</div>
                 <div className="stat-info">
                   <h3>{stats?.active_users || 0}</h3>
@@ -93,7 +99,7 @@ const AdminDashboard = () => {
                 </div>
               </div>
               
-              <div className="stat-card">
+              <div className="stat-card" id="admin-stat-inactive-users">
                 <div className="stat-icon">❌</div>
                 <div className="stat-info">
                   <h3>{stats?.inactive_users || 0}</h3>
@@ -101,7 +107,7 @@ const AdminDashboard = () => {
                 </div>
               </div>
               
-              <div className="stat-card">
+              <div className="stat-card" id="admin-stat-admins">
                 <div className="stat-icon">👑</div>
                 <div className="stat-info">
                   <h3>{stats?.admins || 0}</h3>
@@ -109,7 +115,7 @@ const AdminDashboard = () => {
                 </div>
               </div>
               
-              <div className="stat-card">
+              <div className="stat-card" id="admin-stat-managers">
                 <div className="stat-icon">📊</div>
                 <div className="stat-info">
                   <h3>{stats?.managers || 0}</h3>
@@ -117,7 +123,7 @@ const AdminDashboard = () => {
                 </div>
               </div>
               
-              <div className="stat-card">
+              <div className="stat-card" id="admin-stat-employees">
                 <div className="stat-icon">👤</div>
                 <div className="stat-info">
                   <h3>{stats?.employees || 0}</h3>
@@ -127,11 +133,11 @@ const AdminDashboard = () => {
             </div>
 
             {/* Recent Users */}
-            <div className="recent-users">
+            <div className="recent-users" id="admin-recent-users">
               <h3>Recent Users</h3>
-              <div className="users-list">
+              <div className="users-list" id="admin-recent-users-list">
                 {stats?.recent_users?.map(user => (
-                  <div key={user.id} className="user-item">
+                  <div key={user.id} className="user-item" id={`admin-recent-user-${user.id}`}>
                     <div className="user-avatar">
                       {user.name.charAt(0).toUpperCase()}
                     </div>

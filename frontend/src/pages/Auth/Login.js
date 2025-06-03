@@ -106,7 +106,11 @@ const Login = () => {
 
             {/* Error Alert */}
             {error && (
-              <Alert severity="error" sx={{ mb: 2 }}>
+              <Alert 
+                severity="error" 
+                sx={{ mb: 2 }}
+                id="login-error-alert"
+              >
                 {error}
               </Alert>
             )}
@@ -117,7 +121,7 @@ const Login = () => {
                 margin="normal"
                 required
                 fullWidth
-                id="email"
+                id="login-email-input"
                 label="Email Address"
                 name="email"
                 autoComplete="email"
@@ -136,7 +140,7 @@ const Login = () => {
                 name="password"
                 label="Password"
                 type={showPassword ? 'text' : 'password'}
-                id="password"
+                id="login-password-input"
                 autoComplete="current-password"
                 value={values.password}
                 onChange={handleChange}
@@ -151,6 +155,7 @@ const Login = () => {
                         onClick={togglePasswordVisibility}
                         onMouseDown={(e) => e.preventDefault()}
                         edge="end"
+                        id="login-toggle-password-btn"
                       >
                         {showPassword ? <VisibilityOff /> : <Visibility />}
                       </IconButton>
@@ -167,6 +172,7 @@ const Login = () => {
                       checked={values.remember}
                       onChange={handleChange}
                       color="primary"
+                      id="login-remember-checkbox"
                     />
                   }
                   label="Remember me"
@@ -176,6 +182,7 @@ const Login = () => {
                   to="/forgot-password"
                   variant="text"
                   size="small"
+                  id="login-forgot-password-link"
                 >
                   Forgot password?
                 </Button>
@@ -187,8 +194,9 @@ const Login = () => {
                 variant="contained"
                 disabled={loading}
                 sx={{ mt: 3, mb: 2, py: 1.5 }}
+                id="login-submit-btn"
               >
-                {loading && <CircularProgress size={20} sx={{ mr: 1 }} />}
+                {loading && <CircularProgress size={20} sx={{ mr: 1 }} id="login-loading-spinner" />}
                 {loading ? 'Signing in...' : 'Sign In'}
               </Button>
 
@@ -200,6 +208,7 @@ const Login = () => {
                     to={ROUTES.REGISTER}
                     variant="text"
                     size="small"
+                    id="login-register-link"
                   >
                     Sign up now
                   </Button>

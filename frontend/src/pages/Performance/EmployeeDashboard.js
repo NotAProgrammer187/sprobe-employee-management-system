@@ -261,7 +261,7 @@ const EmployeeDashboard = () => {
   }
 
   return (
-    <Container maxWidth="xl" sx={{ py: 3 }}>
+    <Container maxWidth="xl" sx={{ py: 3 }} id="employee-dashboard">
       {/* Enhanced Header with User Info and Logout */}
       <Box sx={{ 
         display: 'flex', 
@@ -354,6 +354,7 @@ const EmployeeDashboard = () => {
               showConfirmDialog={true}
               onLogoutStart={() => console.log('Employee logging out...')}
               onLogoutComplete={() => console.log('Employee logout completed')}
+              id="employee-logout-btn"
             />
           </Box>
         )}
@@ -569,6 +570,7 @@ const EmployeeDashboard = () => {
                             <IconButton
                               size="small"
                               onClick={() => handleViewReview(review.id)}
+                              id={`employee-view-review-btn-${review.id}`}
                               sx={{
                                 '&:hover': {
                                   bgcolor: 'primary.50'

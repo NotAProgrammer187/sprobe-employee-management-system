@@ -110,27 +110,29 @@ const UserManagement = ({ onStatsUpdate }) => {
   };
 
   return (
-    <div className="user-management">
+    <div className="user-management" id="user-management">
       <div className="user-management-header">
         <h2>User Management</h2>
-        <button onClick={handleAddUser} className="add-user-btn">
+        <button onClick={handleAddUser} className="add-user-btn" id="user-mgmt-add-user-btn">
           Add New User
         </button>
       </div>
 
       {/* Filters */}
-      <div className="filters">
+      <div className="filters" id="user-mgmt-filters">
         <input
           type="text"
           placeholder="Search users..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="search-input"
+          id="user-mgmt-search-input"
         />
         <select
           value={roleFilter}
           onChange={(e) => setRoleFilter(e.target.value)}
           className="role-filter"
+          id="user-mgmt-role-filter"
         >
           <option value="">All Roles</option>
           <option value="admin">Admin</option>
@@ -141,10 +143,10 @@ const UserManagement = ({ onStatsUpdate }) => {
 
       {/* Users Table */}
       {loading ? (
-        <div className="loading">Loading users...</div>
+        <div className="loading" id="user-mgmt-loading">Loading users...</div>
       ) : (
-        <div className="users-table-container">
-          <table className="users-table">
+        <div className="users-table-container" id="user-mgmt-table-container">
+          <table className="users-table" id="user-mgmt-table">
             <thead>
               <tr>
                 <th>Name</th>
@@ -157,7 +159,7 @@ const UserManagement = ({ onStatsUpdate }) => {
             </thead>
             <tbody>
               {users.map(user => (
-                <tr key={user.id}>
+                <tr key={user.id} id={`user-row-${user.id}`}>
                   <td>{user.name}</td>
                   <td>{user.email}</td>
                   <td>
@@ -176,12 +178,14 @@ const UserManagement = ({ onStatsUpdate }) => {
                       <button
                         onClick={() => handleEditUser(user)}
                         className="edit-btn"
+                        id={`user-mgmt-edit-btn-${user.id}`}
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => handleDeleteUser(user.id)}
                         className="delete-btn"
+                        id={`user-mgmt-delete-btn-${user.id}`}
                       >
                         Delete
                       </button>
@@ -196,19 +200,20 @@ const UserManagement = ({ onStatsUpdate }) => {
 
       {/* Modal */}
       {showModal && (
-        <div className="modal-overlay">
-          <div className="modal">
+        <div className="modal-overlay" id="user-mgmt-modal-overlay">
+          <div className="modal" id="user-mgmt-modal">
             <div className="modal-header">
               <h3>{editingUser ? 'Edit User' : 'Add New User'}</h3>
               <button
                 onClick={() => setShowModal(false)}
                 className="close-btn"
+                id="user-mgmt-modal-close-btn"
               >
                 ×
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="user-form">
+            <form onSubmit={handleSubmit} className="user-form" id="user-form">
               <div className="form-group">
                 <label>Name</label>
                 <input
@@ -218,6 +223,7 @@ const UserManagement = ({ onStatsUpdate }) => {
                   onChange={handleInputChange}
                   className={formErrors.name ? 'error' : ''}
                   required
+                  id="user-form-name-input"
                 />
                 {formErrors.name && (
                   <span className="error-message">{formErrors.name[0]}</span>
@@ -233,6 +239,7 @@ const UserManagement = ({ onStatsUpdate }) => {
                   onChange={handleInputChange}
                   className={formErrors.email ? 'error' : ''}
                   required
+                  id="user-form-email-input"
                 />
                 {formErrors.email && (
                   <span className="error-message">{formErrors.email[0]}</span>
@@ -248,6 +255,7 @@ const UserManagement = ({ onStatsUpdate }) => {
                   onChange={handleInputChange}
                   className={formErrors.password ? 'error' : ''}
                   required={!editingUser}
+                  id="user-form-password-input"
                 />
                 {formErrors.password && (
                   <span className="error-message">{formErrors.password[0]}</span>
@@ -261,6 +269,7 @@ const UserManagement = ({ onStatsUpdate }) => {
                   value={formData.role}
                   onChange={handleInputChange}
                   required
+                  id="user-form-role-select"
                 >
                   <option value="employee">Employee</option>
                   <option value="manager">Manager</option>
@@ -275,16 +284,25 @@ const UserManagement = ({ onStatsUpdate }) => {
                     name="is_active"
                     checked={formData.is_active}
                     onChange={handleInputChange}
+                    id="user-form-active-checkbox"
                   />
                   Active User
                 </label>
               </div>
 
               <div className="form-actions">
-                <button type="button" onClick={() => setShowModal(false)}>
+                <button 
+                  type="button" 
+                  onClick={() => setShowModal(false)}
+                  id="user-form-cancel-btn"
+                >
                   Cancel
                 </button>
-                <button type="submit" className="submit-btn">
+                <button 
+                  type="submit" 
+                  className="submit-btn"
+                  id="user-form-submit-btn"
+                >
                   {editingUser ? 'Update User' : 'Create User'}
                 </button>
               </div>

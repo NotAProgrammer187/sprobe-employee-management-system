@@ -70,6 +70,7 @@ const LogoutButton = ({
           onClick={handleLogoutClick}
           disabled={loading}
           size={size}
+          id="logout-text-btn"
           sx={{
             textTransform: 'none',
             fontWeight: 500,
@@ -87,6 +88,7 @@ const LogoutButton = ({
           <Dialog
             open={showDialog}
             onClose={handleDialogClose}
+            id="logout-confirm-dialog"
             PaperProps={{
               sx: {
                 borderRadius: '12px',
@@ -109,6 +111,7 @@ const LogoutButton = ({
                 onClick={handleDialogClose}
                 variant="outlined"
                 sx={{ mr: 1 }}
+                id="logout-dialog-cancel-btn"
               >
                 Cancel
               </Button>
@@ -117,6 +120,7 @@ const LogoutButton = ({
                 variant="contained"
                 color="error"
                 startIcon={<LogoutIcon />}
+                id="logout-dialog-confirm-btn"
               >
                 Sign Out
               </Button>
@@ -136,6 +140,7 @@ const LogoutButton = ({
         variant="outlined"
         size={size}
         startIcon={loading ? <CircularProgress size={16} /> : <LogoutIcon />}
+        id="logout-main-btn"
         sx={{
           textTransform: 'none',
           fontWeight: 500,
@@ -159,6 +164,7 @@ const LogoutButton = ({
         <Dialog
           open={showDialog}
           onClose={handleDialogClose}
+          id="logout-confirm-dialog"
           PaperProps={{
             sx: {
               borderRadius: '12px',
@@ -181,6 +187,7 @@ const LogoutButton = ({
               onClick={handleDialogClose}
               variant="outlined"
               sx={{ mr: 1 }}
+              id="logout-dialog-cancel-btn"
             >
               Cancel
             </Button>
@@ -189,6 +196,7 @@ const LogoutButton = ({
               variant="contained"
               color="error"
               startIcon={<LogoutIcon />}
+              id="logout-dialog-confirm-btn"
             >
               Sign Out
             </Button>

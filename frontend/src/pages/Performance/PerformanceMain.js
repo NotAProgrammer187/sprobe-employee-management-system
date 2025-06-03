@@ -178,7 +178,7 @@ const PerformanceMain = () => {
                    !(location.pathname.includes('/reviews/') && location.pathname.includes('/edit'));
 
   return (
-    <Container maxWidth="xl" sx={{ py: 3 }}>
+    <Container maxWidth="xl" sx={{ py: 3 }} id="performance-main">
       {/* Header with User Info and Logout */}
       <Box sx={{ 
         display: 'flex', 
@@ -261,6 +261,7 @@ const PerformanceMain = () => {
               showConfirmDialog={true}
               onLogoutStart={() => console.log('User logging out...')}
               onLogoutComplete={() => console.log('Logout completed')}
+              id="performance-logout-btn"
             />
           </Box>
         )}
@@ -282,6 +283,7 @@ const PerformanceMain = () => {
             onChange={handleTabChange}
             sx={{ px: 2 }}
             variant="fullWidth"
+            id="performance-main-tabs"
             TabIndicatorProps={{
               sx: {
                 height: 3,
@@ -293,6 +295,7 @@ const PerformanceMain = () => {
               icon={<DashboardIcon />}
               label="Dashboard"
               iconPosition="start"
+              id="performance-dashboard-tab"
               sx={{
                 textTransform: 'none',
                 fontWeight: 500,
@@ -307,6 +310,7 @@ const PerformanceMain = () => {
               icon={<ReviewIcon />}
               label="Reviews"
               iconPosition="start"
+              id="performance-reviews-tab"
               sx={{
                 textTransform: 'none',
                 fontWeight: 500,
@@ -321,6 +325,7 @@ const PerformanceMain = () => {
               icon={<TemplateIcon />}
               label="Templates"
               iconPosition="start"
+              id="performance-templates-tab"
               sx={{
                 textTransform: 'none',
                 fontWeight: 500,
